@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agendamento - Danilo Barbearia</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+    <style>
+      .agendamento-wrap{padding:2rem}
+      .user-card{background:rgba(255,255,255,0.02);padding:1rem;border-radius:10px;margin-bottom:1rem}
+      .service-list{display:grid;gap:0.6rem}
+      .service-item{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.08));padding:0.8rem;border-radius:8px}
+    </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/">Danilo<span>Barbearia</span></a>
+      <nav>
+        <form action="/logout" method="post" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn" type="submit">Sair</button>
+        </form>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <div class="container agendamento-wrap">
+      {# Bloco para mensagens flash #}
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <div class="flash-messages">
+            {% for msg in messages %}
+              <div class="flash">{{ msg }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+      <h1>Agendamento</h1>
+      <div class="user-card">
+        <strong>Usuário:</strong> {{ usuario.nome }}<br>
+        <strong>Telefone:</strong> {{ usuario.numero }}
+      </div>
+
+      <h2>Escolha um serviço</h2>
+      <form action="/confirmar" method="post" class="service-select-row">
+        <div class="select-col">
+          <label for="serviceCombobox">Serviço</label>
+          <div class="combobox" id="serviceCombobox" role="combobox" aria-haspopup="listbox" aria-expanded="false">
+            <button type="button" class="combobox-toggle" aria-label="Abrir lista de serviços" aria-expanded="false">
+              <span id="comboboxLabel">Selecione um serviço</span>
+              <span class="caret"></span>
+            </button>
+            <ul class="combobox-list" role="listbox" tabindex="-1" id="serviceList">
+              {% for key, s in services.items() %}
+                <li role="option" data-value="{{ key }}" data-price="{{ s.price }}" data-image="{{ url_for('static', filename=s.image) }}" id="opt-{{ key }}">{{ s.label }} — R$ {{ s.price }}</li>
+              {% endfor %}
+            </ul>
+            <input type="hidden" name="service" id="serviceInput" value="">
+          </div>
+          <div id="selectedPrice" style="margin-top:0.5rem;color:var(--muted)"></div>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div style="margin-top:0.75rem">
+            <button class="btn primary" type="submit">Confirmar agendamento</button>
+          </div>
+        </div>
+        <div class="preview-col">
+          <div class="service-preview">
+            <img id="serviceImage" alt="Imagem do serviço" src="" />
+            <div id="serviceInfo" class="service-info"></div>
+          </div>
+        </div>
+      </form>
+
+      <p style="margin-top:1rem;color:var(--muted)">Observação: Aqui você pode implementar seleção de data/hora e confirmação do agendamento.</p>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="container">
+      <p>© <span id="ano"></span> Danilo Barbearia — Todos os direitos reservados</p>
+    </div>
+  </footer>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script>document.getElementById('ano').textContent = new Date().getFullYear();</script>
+</body>
+</html>

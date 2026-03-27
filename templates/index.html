@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Danilo Barbearia</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+    </head>
+<body>
+    <header class="site-header">
+        <div class="container header-inner">
+            <a class="brand" href="#">Danilo<span>Barbearia</span></a>
+            <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
+                <span class="hamburger"></span>
+            </button>
+            <nav class="site-nav" aria-label="Navegação principal">
+                <button class="nav-close" aria-label="Fechar menu">&times;</button>
+                <ul>
+                    <li><a href="#servicos">Serviços</a></li>
+                    <li><a href="#galeria">Galeria</a></li>
+                    <li><a href="#horario">Horário</a></li>
+                    <li><a href="#contato">Contato</a></li>
+                </ul>
+            </nav>
+
+            {# Mostrar estado logado / botão de logout quando houver usuário na sessão #}
+            {% if usuario %}
+            <div class="header-actions">
+                <span class="muted">Olá, {{ usuario.nome }}</span>
+                <form action="/logout" method="post" style="display:inline;margin-left:0.6rem">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button class="btn" type="submit">Sair</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </header>
+
+    {# Bloco para mensagens flash #}
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="container flash-messages">
+          {% for msg in messages %}
+            <div class="flash">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <main>
+        <section class="hero">
+            <div class="container">
+                <h1>Bem-vindo à Danilo Barbearia</h1>
+                <p class="lead">Cortes clássicos e modernos com atenção aos detalhes. Agende seu horário!</p>
+                <button class="btn primary open-modal" type="button">Agende agora</button>
+            </div>
+        </section>
+
+        <section id="servicos" class="servicos container">
+            <h2>Serviços</h2>
+            <div class="cards">
+                <article class="card">
+                    <h3>Corte social com barba</h3>
+                    <p>Acabamento social + barba modelada.</p>
+                    <span class="price">R$ 50</span>
+                </article>
+                <article class="card">
+                    <h3>Corte degradê com barba</h3>
+                    <p>Degradê personalizado + barba.</p>
+                    <span class="price">R$ 52</span>
+                </article>
+                <article class="card">
+                    <h3>Corte degradê</h3>
+                    <p>Degradê limpo e bem marcado.</p>
+                    <span class="price">R$ 32</span>
+                </article>
+                <article class="card">
+                    <h3>Corte social</h3>
+                    <p>Corte social tradicional com finalização.</p>
+                    <span class="price">R$ 27</span>
+                </article>
+                <article class="card">
+                    <h3>Corte máquina</h3>
+                    <p>Corte rápido e preciso com máquina.</p>
+                    <span class="price">R$ 22</span>
+                </article>
+                <article class="card">
+                    <h3>Corte navalhado</h3>
+                    <p>Acabamento com navalha para linhas definidas.</p>
+                    <span class="price">R$ 32</span>
+                </article>
+                <article class="card">
+                    <h3>Barba</h3>
+                    <p>Modelagem, hidratação e finalização.</p>
+                    <span class="price">R$ 27</span>
+                </article>
+                <article class="card">
+                    <h3>Pezinho do cabelo</h3>
+                    <p>Ajuste nas laterais e nuca.</p>
+                    <span class="price">R$ 17</span>
+                </article>
+                <article class="card">
+                    <h3>Sobrancelha</h3>
+                    <p>Design e limpeza de sobrancelhas.</p>
+                    <span class="price">R$ 10</span>
+                </article>
+                <article class="card">
+                    <h3>Corte só Tesoura</h3>
+                    <p>Corte apenas com tesoura para acabamento mais natural.</p>
+                    <span class="price">R$ 32</span>
+                </article>
+            </div>
+        </section>
+
+        <section id="galeria" class="galeria container">
+            <h2>Galeria</h2>
+            <div class="gallery-grid">
+                <div class="thumb"></div>
+                <div class="thumb"></div>
+                <div class="thumb"></div>
+                <div class="thumb"></div>
+            </div>
+        </section>
+
+        <section id="horario" class="horario container">
+            <h2>Horário de Funcionamento</h2>
+            <ul>
+                <li>Segunda a Sexta: 09:00 — 19:00</li>
+                <li>Sábado: 09:00 — 14:00</li>
+                <li>Domingo: Fechado</li>
+            </ul>
+        </section>
+    </main>
+
+    <!-- Modal de agendamento -->
+    <div class="modal-overlay" id="bookingModal" aria-hidden="true">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+            <button class="modal-close" aria-label="Fechar">&times;</button>
+            <h3 id="modalTitle">Cadastro</h3>
+            <form id="bookingForm" action="/cadastro" method="post" novalidate>
+                <div class="field-row">
+                    <label for="bNome">Nome</label>
+                    <input type="text" id="bNome" name="nome" required>
+                </div>
+                <div class="field-row">
+                    <label for="bTel">Telefone</label>
+                    <input type="tel" id="bTel" name="numero" required>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn primary" type="submit">Cadastrar</button>
+                    <button class="btn" type="button" id="cancelBooking">Cancelar</button>
+                </div>
+                <p class="modal-status" id="bookingStatus" aria-live="polite"></p>
+            </form>
+        </div>
+    </div>
+
+    <footer class="site-footer">
+        <div class="container">
+            <p>© <span id="ano"></span> Danilo Barbearia — Todos os direitos reservados</p>
+            <p class="socials">Telefone: <a href="tel:+550000000000">(00) 0000-0000</a></p>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
