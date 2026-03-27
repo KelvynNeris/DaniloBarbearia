@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Alterar dados do Administrador — Barbearia</title>
+  <link rel="stylesheet" href="/static/styles/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1>Alterar dados do Administrador</h1>
+      <a href="/" class="btn-link">Voltar</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <form method="post" action="/admin/change">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field-row">
+          <label>Usuário</label>
+          <div class="readonly">{{ admin.username }}</div>
+        </div>
+        <div class="field-row">
+          <label for="name">Nome completo</label>
+          <input id="name" name="name" required maxlength="255" value="{{ admin.name }}">
+        </div>
+        <div class="field-row">
+          <label for="phone">Telefone</label>
+          <input id="phone" name="phone" type="tel" maxlength="20" value="{{ admin.phone }}">
+        </div>
+        <div class="field-row">
+          <label for="password">Nova senha (opcional)</label>
+          <input id="password" name="password" type="password" minlength="6" placeholder="Deixe vazio para manter a mesma">
+        </div>
+        <div class="field-row">
+          <label for="password2">Confirme nova senha</label>
+          <input id="password2" name="password2" type="password" minlength="6">
+        </div>
+        <div class="actions">
+          <button type="submit" class="btn">Salvar alterações</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Login do Administrador — Barbearia</title>
+  <link rel="stylesheet" href="/static/styles/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1>Login do Administrador</h1>
+      <a href="/" class="btn-link">Voltar</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <form method="post" action="/admin/login">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field-row">
+          <label for="username">Usuário</label>
+          <input id="username" name="username" required maxlength="150" placeholder="adm">
+        </div>
+        <div class="field-row">
+          <label for="password">Senha</label>
+          <input id="password" name="password" type="password" required minlength="1" placeholder="Senha">
+        </div>
+        <div class="actions">
+          <button type="submit" class="btn">Entrar</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>

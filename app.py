@@ -3,6 +3,7 @@ import mysql.connector
 import uuid
 from datetime import datetime, date
 from conexao import Conexao
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Serviços disponíveis (chave -> rótulo, preço e imagem)
 SERVICES = {
@@ -63,6 +64,24 @@ def normalize_phone(raw):
         return '+' + digits
     return '+' + digits
 
+
+def normalize_name(raw):
+    """Normalize a person's name so each word (and hyphenated subword) starts with an uppercase
+    letter and the rest are lowercase. Example: 'joão da silva' -> 'João Da Silva'."""
+    if not raw:
+        return ''
+    s = str(raw).strip()
+    if not s:
+        return ''
+    # collapse multiple spaces
+    parts = s.split()
+    normalized_parts = []
+    for p in parts:
+        # handle hyphenated names like 'anna-maria'
+        sub = [ (subp.lower().capitalize() if subp else subp) for subp in p.split('-') ]
+        normalized_parts.append('-'.join(sub))
+    return ' '.join(normalized_parts)
+
 @app.route("/")
 def inicio():
     # Garante CSRF token na sessão e passa para o template
@@ -70,6 +89,115 @@ def inicio():
         session['csrf_token'] = str(uuid.uuid4())
     usuario = session.get('usuario')
     return render_template("index.html", csrf_token=session.get('csrf_token'), usuario=usuario)
+
+
+@app.route('/admin/login', methods=['GET','POST'])
+def admin_login():
+    # Ensure CSRF
+    if 'csrf_token' not in session:
+        session['csrf_token'] = str(uuid.uuid4())
+
+    if request.method == 'GET':
+        return render_template('admin_login.html', csrf_token=session.get('csrf_token'), usuario=session.get('usuario'))
+
+    # POST: process login
+    form_token = request.form.get('csrf_token')
+    if not form_token or form_token != session.get('csrf_token'):
+        flash('Requisição inválida (CSRF).')
+        return redirect('/admin/login')
+
+    username = (request.form.get('username') or '').strip()
+    password = request.form.get('password') or ''
+    if not username or not password:
+        flash('Preencha usuário e senha.')
+        return redirect('/admin/login')
+
+    try:
+        conn = Conexao.conectar()
+        cur = conn.cursor(dictionary=True)
+        cur.execute('SELECT id, username, name, phone, password_hash FROM admins WHERE username = %s LIMIT 1', (username,))
+        row = cur.fetchone()
+        cur.close(); conn.close()
+        if not row:
+            flash('Usuário/senha inválidos.')
+            return redirect('/admin/login')
+        if not check_password_hash(row.get('password_hash',''), password):
+            flash('Usuário/senha inválidos.')
+            return redirect('/admin/login')
+
+        # login successful: store admin id in session
+        session['admin_id'] = row.get('id')
+        session['admin_username'] = row.get('username')
+
+        # detect default predefined admin values to force change on first login
+        default_raw_phone = '+55 (99) 99999-9999'
+        default_phone_norm = normalize_phone(default_raw_phone)
+        if ( (row.get('name') or '').strip().lower() == 'adm' and (row.get('phone') or '') == default_phone_norm ):
+            return redirect('/admin/change')
+
+        flash('Login de administrador bem-sucedido.')
+        return redirect('/')
+    except Exception:
+        flash('Erro ao verificar credenciais (banco).')
+        return redirect('/admin/login')
+
+
+@app.route('/admin/change', methods=['GET','POST'])
+def admin_change():
+    # allow logged-in admin to change name, phone and password
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+
+    if request.method == 'GET':
+        # fetch current admin values
+        try:
+            conn = Conexao.conectar()
+            cur = conn.cursor(dictionary=True)
+            cur.execute('SELECT id, username, name, phone FROM admins WHERE id = %s', (admin_id,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if not row:
+                flash('Administrador não encontrado.')
+                return redirect('/admin/login')
+            return render_template('admin_change.html', admin=row, csrf_token=session.get('csrf_token'))
+        except Exception:
+            flash('Erro ao acessar o banco.')
+            return redirect('/')
+
+    # POST: apply changes
+    form_token = request.form.get('csrf_token')
+    if not form_token or form_token != session.get('csrf_token'):
+        flash('Requisição inválida (CSRF).')
+        return redirect('/admin/change')
+
+    name_raw = request.form.get('name') or ''
+    phone_raw = request.form.get('phone') or ''
+    password = request.form.get('password') or ''
+    password2 = request.form.get('password2') or ''
+
+    if password and password != password2:
+        flash('As senhas não coincidem.')
+        return redirect('/admin/change')
+
+    name = normalize_name(name_raw) if name_raw.strip() else None
+    phone = normalize_phone(phone_raw) if phone_raw.strip() else None
+
+    try:
+        conn = Conexao.conectar()
+        cur = conn.cursor()
+        if password:
+            pwd_hash = generate_password_hash(password)
+            cur.execute('UPDATE admins SET name=%s, phone=%s, password_hash=%s WHERE id = %s', (name, phone, pwd_hash, admin_id))
+        else:
+            cur.execute('UPDATE admins SET name=%s, phone=%s WHERE id = %s', (name, phone, admin_id))
+        conn.commit(); cur.close(); conn.close()
+        flash('Dados do administrador atualizados.')
+        return redirect('/')
+    except Exception:
+        flash('Erro ao atualizar admin (banco).')
+        return redirect('/admin/change')
 
 
 @app.route('/ocupados')
@@ -102,7 +230,8 @@ def ocupados():
 
 @app.route("/cadastro", methods=["POST"])
 def cadastro():
-    nome = request.form.get("nome")
+    nome_raw = request.form.get("nome")
+    nome = normalize_name(nome_raw)
     raw_num = request.form.get("numero")
     numero = normalize_phone(raw_num)
     # Salva dados na sessão (telefone normalizado) e redireciona para a página de agendamento
@@ -548,4 +677,30 @@ def logout():
     return redirect('/')
 
 if __name__ == "__main__":
+    # Ensure a default predefined admin exists (username 'adm', name 'adm', phone '+55 (99) 99999-9999', password '123')
+    def ensure_default_admin():
+        default_username = 'adm'
+        default_name = 'adm'
+        default_phone_raw = '+55 (99) 99999-9999'
+        default_password = '123'
+        try:
+            conn = Conexao.conectar()
+            cur = conn.cursor()
+            cur.execute('SELECT id FROM admins WHERE username = %s LIMIT 1', (default_username,))
+            row = cur.fetchone()
+            if not row:
+                pwd_hash = generate_password_hash(default_password)
+                phone_norm = normalize_phone(default_phone_raw)
+                name_norm = normalize_name(default_name)
+                cur.execute('INSERT INTO admins (username, name, phone, password_hash) VALUES (%s,%s,%s,%s)',
+                            (default_username, name_norm, phone_norm, pwd_hash))
+                conn.commit()
+            cur.close(); conn.close()
+        except Exception:
+            try:
+                cur and cur.close(); conn and conn.close()
+            except Exception:
+                pass
+
+    ensure_default_admin()
     app.run(debug=True, host="0.0.0.0", port=8080)

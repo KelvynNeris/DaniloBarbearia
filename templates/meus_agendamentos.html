@@ -52,29 +52,36 @@
     <div class="container agendamento-wrap">
       <h1>Meus Agendamentos</h1>
       {% if bookings and bookings|length > 0 %}
-        <div class="cards">
+        <div class="cards appts">
           {% for b in bookings %}
-            <div class="card">
-              <strong>{{ b.service_label }}</strong>
-              <div style="margin-top:0.5rem">Data: {{ b.date }} — Horário: {{ b.time }}</div>
-              <div style="margin-top:0.5rem">Telefone: {{ b.usuario.numero if b.usuario else b.client_phone }}</div>
-              <form action="/cancelar" method="post" style="display:inline;margin-top:0.6rem">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <article class="card appt-card">
+              <div class="card-body">
+                <h3>{{ b.service_label }}</h3>
+                <div class="meta">
+                  <span class="meta-item">📅 <strong>{{ b.date }}</strong></span>
+                  <span class="meta-item">⏰ <strong>{{ b.time }}</strong></span>
+                  <span class="meta-item">📞 {{ b.usuario.numero if b.usuario else b.client_phone }}</span>
+                </div>
+              </div>
+              <div class="card-actions">
+                <form action="/cancelar" method="post" class="action-form">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  {% if b.get('id') %}
+                    <input type="hidden" name="booking_type" value="db">
+                    <input type="hidden" name="booking_id" value="{{ b.id }}">
+                  {% else %}
+                    <input type="hidden" name="booking_type" value="session">
+                    <input type="hidden" name="session_idx" value="{{ loop.index0 }}">
+                  {% endif %}
+                  <button class="btn" type="submit">Cancelar</button>
+                </form>
                 {% if b.get('id') %}
-                  <input type="hidden" name="booking_type" value="db">
-                  <input type="hidden" name="booking_id" value="{{ b.id }}">
+                  <a class="btn primary" href="/alterar?type=db&id={{ b.id }}">Trocar horário</a>
                 {% else %}
-                  <input type="hidden" name="booking_type" value="session">
-                  <input type="hidden" name="session_idx" value="{{ loop.index0 }}">
+                  <a class="btn primary" href="/agendamento">Trocar horário</a>
                 {% endif %}
-                <button class="btn" type="submit">Cancelar</button>
-              </form>
-              {% if b.get('id') %}
-                <a class="btn primary" href="/alterar?type=db&id={{ b.id }}">Trocar horário</a>
-              {% else %}
-                <a class="btn primary" href="/agendamento">Trocar horário</a>
-              {% endif %}
-            </div>
+              </div>
+            </article>
           {% endfor %}
         </div>
       {% else %}

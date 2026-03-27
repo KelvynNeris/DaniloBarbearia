@@ -38,6 +38,51 @@ CREATE TABLE IF NOT EXISTS agendamentos (
 CREATE INDEX idx_agend_date ON agendamentos(date);
 CREATE INDEX idx_agend_service ON agendamentos(service_key);
 
+-- =======================
+-- Tabela: admins (proprietário/administradores)
+-- Campos:
+-- id            : PK autoincrement
+-- username      : identificador único para login (ex: email ou user)
+-- name          : nome completo do administrador
+-- phone         : telefone de contato (opcional, único)
+-- password_hash : senha criptografada (bcrypt/werkzeug)
+-- created_at    : timestamp de criação
+
+CREATE TABLE IF NOT EXISTS admins (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(150) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  phone VARCHAR(50) DEFAULT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_admin_username UNIQUE (username),
+  CONSTRAINT uq_admin_phone UNIQUE (phone)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Optional: inserir um administrador pré-definido.
+-- Observação importante: a aplicação (`app.py`) já contém uma rotina que cria
+-- o administrador padrão com a senha corretamente 'hashada' por Python/werkzeug
+-- (recomenda-se deixar que a aplicação crie o registro). Se preferir inserir
+-- via SQL, gere primeiro o hash da senha com Python e cole o resultado abaixo
+-- no lugar de <PASTE_HASH_HERE>.
+-- Exemplo para gerar o hash localmente (execute na pasta do projeto):
+--   python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('123'))"
+-- Em seguida copie o valor retornado e substitua <PASTE_HASH_HERE> no INSERT abaixo.
+
+-- Template de INSERT (execute após gerar o hash):
+-- INSERT INTO admins (username, name, phone, password_hash)
+-- VALUES ('adm', 'adm', '+55 (99) 99999-9999', '<PASTE_HASH_HERE>');
+-- Se desejar apenas garantir a presença do registro sem gerar hash agora,
+-- a aplicação criará o administrador padrão automaticamente ao iniciar.
+
+-- INSERT gerado com hash da senha '123' (gerado via werkzeug)
+INSERT INTO admins (username, name, phone, password_hash)
+VALUES ('adm', 'adm', '+55 (99) 99999-9999', 'scrypt:32768:8:1$IDKMEqRzALJru5W3$0640f90d278e5e391e2f0b2aa90d402a4e50faf6745457d794d556ca817cef8b309cd9b85eaf72c20cca205c6b3c4cf21d2c225ba80eb206441fbd7fba2ae392');
+
+-- Se desejar apenas garantir a presença do registro sem gerar hash agora,
+-- a aplicação criará o administrador padrão automaticamente ao iniciar.
+
+
 -- Exemplo de checagem/insert seguro com lock (pseudo):
 -- START TRANSACTION;
 -- SELECT COUNT(*) FROM agendamentos WHERE date = '2026-03-29' AND time = '09:20' FOR UPDATE;

@@ -122,20 +122,91 @@ document.addEventListener('DOMContentLoaded', function(){
       return '+' + digits;
     }
 
+    // normalize name: first letter of each name/surname uppercase, rest lowercase
+    function formatName(raw){
+      if(!raw) return '';
+      // trim and collapse multiple spaces
+      var s = String(raw).trim().replace(/\s+/g, ' ');
+      if(!s) return '';
+      // handle hyphenated parts too (e.g., anna-maria => Anna-Maria)
+      var parts = s.split(' ');
+      var out = parts.map(function(part){
+        return part.split('-').map(function(p){
+          if(!p) return p;
+          var lower = p.toLowerCase();
+          return lower.charAt(0).toUpperCase() + lower.slice(1);
+        }).join('-');
+      }).join(' ');
+      return out;
+    }
+
     bookingForm.addEventListener('submit', function(e){
       bookingStatus.textContent = '';
       var nome = bookingForm.querySelector('#bNome');
+      // ensure name is formatted before validation/submission
+      if(nome && nome.value) nome.value = formatName(nome.value);
       var tel = bookingForm.querySelector('#bTel');
       if(!nome.value.trim() || !tel.value.trim()){
         e.preventDefault();
         bookingStatus.textContent = 'Por favor, preencha nome e telefone.';
         return;
       }
-      // normalize phone input before submit
-      tel.value = normalizePhoneForSubmit(tel.value.trim());
+      // validate and normalize phone input before submit
+      var raw = tel.value.trim();
+      var digits = raw.replace(/\D/g,'');
+      // require 11 digits (DD + 9-digit local) for the (xx) xxxxx-xxxx format
+      if(digits.length !== 11){
+        e.preventDefault();
+        bookingStatus.textContent = 'Telefone inválido. Use o formato (xx) xxxxx-xxxx.';
+        return;
+      }
+      tel.value = normalizePhoneForSubmit(raw);
       // allow form to submit
     });
   }
+
+  // attach formatting on blur to the booking name input (if present)
+  (function(){
+    var nameEl = document.getElementById('bNome');
+    if(!nameEl) return;
+    nameEl.addEventListener('blur', function(){
+      if(nameEl.value) nameEl.value = formatName(nameEl.value);
+    });
+  })();
+
+  // Phone input masking for modal (format: (xx) xxxxx-xxxx)
+  (function(){
+    var telEl = document.getElementById('bTel');
+    if(!telEl) return;
+    function formatBRPhone(v){
+      var digits = v.replace(/\D/g,'').slice(0,11);
+      if(digits.length <= 2) return '(' + digits;
+      if(digits.length <= 6) return '(' + digits.slice(0,2) + ') ' + digits.slice(2);
+      if(digits.length <= 10) return '(' + digits.slice(0,2) + ') ' + digits.slice(2,6) + '-' + digits.slice(6);
+      // 11 digits
+      return '(' + digits.slice(0,2) + ') ' + digits.slice(2,7) + '-' + digits.slice(7);
+    }
+    telEl.addEventListener('input', function(e){
+      var cur = telEl.value;
+      var pos = telEl.selectionStart;
+      var before = cur.slice(0,pos);
+      telEl.value = formatBRPhone(cur);
+      // try to restore caret near end
+      telEl.setSelectionRange(telEl.value.length, telEl.value.length);
+    });
+    telEl.addEventListener('blur', function(e){
+      // on blur, ensure fully formatted or clear
+      var digits = telEl.value.replace(/\D/g,'');
+      if(digits.length === 0){ telEl.value = ''; return; }
+      if(digits.length !== 11){
+        // leave as-is but user will be prevented on submit
+        telEl.classList.add('invalid');
+      } else {
+        telEl.classList.remove('invalid');
+        telEl.value = formatBRPhone(digits);
+      }
+    });
+  })();
 
   // Service preview: combobox implementation (custom) - uses real images when available; fallback to generated SVG
   var combobox = document.getElementById('serviceCombobox');

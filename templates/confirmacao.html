@@ -50,23 +50,29 @@
 
   <main>
     <div class="container agendamento-wrap">
-      <h1>Agendamento Confirmado</h1>
-      <div class="user-card">
-        <strong>Usuário:</strong> {{ booking.usuario.nome }}<br>
-        <strong>Telefone:</strong> {{ booking.usuario.numero }}
-      </div>
-
-      <div style="margin-top:1rem">
-        <strong>Serviço:</strong> {{ booking.service_label }}<br>
-        <strong>Preço:</strong> R$ {{ booking.price }}<br>
-        <strong>Data:</strong> {{ booking.date }}<br>
-        <strong>Horário:</strong> {{ booking.time }}
-      </div>
-
-      <div style="margin-top:1rem">
-        <a class="btn" href="/agendamento">Voltar</a>
-        <a class="btn primary" href="/">Ir para página inicial</a>
-      </div>
+      <section class="confirm-card">
+        <div class="confirm-hero">
+          <div class="confirm-icon">✂️</div>
+          <div class="confirm-title">
+            <h1>Agendamento Confirmado</h1>
+            <p class="muted">Obrigado! Seu horário foi reservado com sucesso.</p>
+          </div>
+        </div>
+        <div class="confirm-details">
+          <div class="detail-row"><span class="label">Serviço</span><span class="value">{{ booking.service_label }}</span></div>
+          {% if booking.price %}
+          <div class="detail-row"><span class="label">Preço</span><span class="value">R$ {{ booking.price }}</span></div>
+          {% endif %}
+          <div class="detail-row"><span class="label">Data</span><span class="value">{{ booking.date }}</span></div>
+          <div class="detail-row"><span class="label">Horário</span><span class="value">{{ booking.time }}</span></div>
+          <div class="detail-row"><span class="label">Nome</span><span class="value">{{ booking.usuario.nome }}</span></div>
+          <div class="detail-row"><span class="label">Telefone</span><span class="value">{{ booking.usuario.numero }}</span></div>
+        </div>
+        <div class="confirm-actions">
+          <a class="btn" href="/agendamento">Agendar outro</a>
+          <a class="btn primary" href="/meus_agendamentos">Meus Agendamentos</a>
+        </div>
+      </section>
     </div>
   </main>
   <footer class="site-footer">
