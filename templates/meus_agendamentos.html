@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Confirmação - Danilo Barbearia</title>
+  <title>Meus Agendamentos - Danilo Barbearia</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
 </head>
 <body>
@@ -50,23 +50,37 @@
 
   <main>
     <div class="container agendamento-wrap">
-      <h1>Agendamento Confirmado</h1>
-      <div class="user-card">
-        <strong>Usuário:</strong> {{ booking.usuario.nome }}<br>
-        <strong>Telefone:</strong> {{ booking.usuario.numero }}
-      </div>
-
-      <div style="margin-top:1rem">
-        <strong>Serviço:</strong> {{ booking.service_label }}<br>
-        <strong>Preço:</strong> R$ {{ booking.price }}<br>
-        <strong>Data:</strong> {{ booking.date }}<br>
-        <strong>Horário:</strong> {{ booking.time }}
-      </div>
-
-      <div style="margin-top:1rem">
-        <a class="btn" href="/agendamento">Voltar</a>
-        <a class="btn primary" href="/">Ir para página inicial</a>
-      </div>
+      <h1>Meus Agendamentos</h1>
+      {% if bookings and bookings|length > 0 %}
+        <div class="cards">
+          {% for b in bookings %}
+            <div class="card">
+              <strong>{{ b.service_label }}</strong>
+              <div style="margin-top:0.5rem">Data: {{ b.date }} — Horário: {{ b.time }}</div>
+              <div style="margin-top:0.5rem">Telefone: {{ b.usuario.numero if b.usuario else b.client_phone }}</div>
+              <form action="/cancelar" method="post" style="display:inline;margin-top:0.6rem">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                {% if b.get('id') %}
+                  <input type="hidden" name="booking_type" value="db">
+                  <input type="hidden" name="booking_id" value="{{ b.id }}">
+                {% else %}
+                  <input type="hidden" name="booking_type" value="session">
+                  <input type="hidden" name="session_idx" value="{{ loop.index0 }}">
+                {% endif %}
+                <button class="btn" type="submit">Cancelar</button>
+              </form>
+              {% if b.get('id') %}
+                <a class="btn primary" href="/alterar?type=db&id={{ b.id }}">Trocar horário</a>
+              {% else %}
+                <a class="btn primary" href="/agendamento">Trocar horário</a>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p>Você não possui agendamentos.</p>
+      {% endif %}
+      <p style="margin-top:1rem"><a class="btn" href="/">Voltar à página inicial</a></p>
     </div>
   </main>
   <footer class="site-footer">
@@ -75,6 +89,5 @@
     </div>
   </footer>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-  <script>document.getElementById('ano').textContent = new Date().getFullYear();</script>
 </body>
 </html>

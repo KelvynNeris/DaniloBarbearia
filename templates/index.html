@@ -20,6 +20,7 @@
                     <li><a href="#galeria">Galeria</a></li>
                     <li><a href="#horario">Horário</a></li>
                     <li><a href="#contato">Contato</a></li>
+                    <li><a href="/meus_agendamentos">Meus Agendamentos</a></li>
                 </ul>
             </nav>
 
@@ -52,7 +53,11 @@
             <div class="container">
                 <h1>Bem-vindo à Danilo Barbearia</h1>
                 <p class="lead">Cortes clássicos e modernos com atenção aos detalhes. Agende seu horário!</p>
+                {% if usuario %}
+                <a class="btn primary" href="/agendamento">Agende agora</a>
+                {% else %}
                 <button class="btn primary open-modal" type="button">Agende agora</button>
+                {% endif %}
             </div>
         </section>
 
@@ -163,5 +168,14 @@
     </footer>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+        {% if not usuario %}
+        <script>
+            // Se não houver usuário logado, abrir o modal de cadastro ao carregar a página.
+            document.addEventListener('DOMContentLoaded', function(){
+                var modal = document.getElementById('bookingModal');
+                if(modal){ modal.setAttribute('aria-hidden','false'); var first = document.getElementById('bNome'); if(first) first.focus(); }
+            });
+        </script>
+        {% endif %}
 </body>
 </html>

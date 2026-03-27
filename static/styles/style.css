@@ -95,6 +95,16 @@ body{
 .combobox-list li:focus{outline:none;background:rgba(217,119,6,0.08)}
 .combobox[aria-expanded="true"] .combobox-toggle{border-color:var(--accent);box-shadow:0 12px 36px rgba(2,6,23,0.6)}
 
+/* occupied / disabled time slots */
+.combobox-list li.occupied,
+.combobox-list li[aria-disabled="true"]{
+  opacity:0.45;
+  cursor:not-allowed;
+  color:var(--muted);
+  background:transparent;
+}
+.combobox-list li.occupied:hover{background:transparent}
+
 
 /* Gallery */
 .gallery-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0.6rem}

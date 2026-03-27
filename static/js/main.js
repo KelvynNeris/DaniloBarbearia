@@ -107,6 +107,21 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // Submissão do booking (validação cliente) — permite submissão ao servidor para cadastro
   if(bookingForm){
+    // normalize phone before submit
+    function normalizePhoneForSubmit(raw){
+      if(!raw) return '';
+      var digits = raw.replace(/\D/g,'');
+      // if starts with country code (e.g., '55' + rest) and length > 11, keep +
+      if(digits.length === 10 || digits.length === 11){
+        return '+55' + digits;
+      }
+      if(digits.length > 11 && digits.indexOf('55') === 0){
+        return '+' + digits;
+      }
+      // fallback: return digits prefixed with + if looks international
+      return '+' + digits;
+    }
+
     bookingForm.addEventListener('submit', function(e){
       bookingStatus.textContent = '';
       var nome = bookingForm.querySelector('#bNome');
@@ -116,7 +131,9 @@ document.addEventListener('DOMContentLoaded', function(){
         bookingStatus.textContent = 'Por favor, preencha nome e telefone.';
         return;
       }
-      // Se passou na validação, deixar o form submeter normalmente ao servidor (/cadastro)
+      // normalize phone input before submit
+      tel.value = normalizePhoneForSubmit(tel.value.trim());
+      // allow form to submit
     });
   }
 
@@ -228,5 +245,191 @@ document.addEventListener('DOMContentLoaded', function(){
 
     // close on outside click
     document.addEventListener('click', function(e){ if(combobox && !combobox.contains(e.target)) closeCombobox(); });
+  }
+
+  /* Time slots combobox: generate 20-minute slots from 08:00 to 18:40 excluding 11:00-12:59 */
+  var timeCombobox = document.getElementById('timeCombobox');
+  var timeToggle = timeCombobox ? timeCombobox.querySelector('.combobox-toggle') : null;
+  var timeList = document.getElementById('timeList');
+  var timeItems = timeList ? Array.from(timeList.querySelectorAll('li')) : [];
+  var timeInput = document.getElementById('timeInput');
+  var dateInput = document.getElementById('dateInput');
+
+  function generateSlotsForDate(dateStr){
+    // returns array of 'HH:MM' strings allowed for the given yyyy-mm-dd date
+    var parts = dateStr.split('-');
+    if(parts.length !== 3) return [];
+    var y = parseInt(parts[0],10), m = parseInt(parts[1],10)-1, d = parseInt(parts[2],10);
+    var now = new Date();
+    var isToday = (now.getFullYear() === y && now.getMonth() === m && now.getDate() === d);
+    var dateObj = new Date(y, m, d);
+    var isSunday = (dateObj.getDay() === 0);
+    var slots = [];
+    if(isSunday){
+      // Sunday: 09:00 - 11:20 (20-min steps)
+      for(var h=9; h<=11; h++){
+        for(var mi of [0,20,40]){
+          if(h === 11 && mi > 20) continue; // cap at 11:20
+          var hh = (h<10? '0'+h: ''+h);
+          var mm = (mi<10? '0'+mi: ''+mi);
+          var t = hh + ':' + mm;
+          if(isToday){
+            var slotDate = new Date(y, m, d, h, mi, 0);
+            if(slotDate <= now) continue;
+          }
+          slots.push(t);
+        }
+      }
+    } else {
+      // Weekdays: 08:00 - 18:40 excluding lunch 11:00-12:59
+      for(var h=8; h<=18; h++){
+        for(var mi of [0,20,40]){
+          // skip lunch 11:00 - 12:59
+          if(h >=11 && h <13) continue;
+          // last allowed start is 18:40
+          if(h === 18 && mi > 40) continue;
+          var hh = (h<10? '0'+h: ''+h);
+          var mm = (mi<10? '0'+mi: ''+mi);
+          var t = hh + ':' + mm;
+          if(isToday){
+            var slotDate = new Date(y, m, d, h, mi, 0);
+            if(slotDate <= now) continue; // skip past slots
+          }
+          slots.push(t);
+        }
+      }
+    }
+    return slots;
+  }
+
+  function populateTimeList(dateStr){
+    if(!timeList) return;
+    // clear
+    timeList.innerHTML = '';
+    var slots = generateSlotsForDate(dateStr);
+    // fetch occupied slots from server
+    fetch('/ocupados?date='+encodeURIComponent(dateStr)).then(function(res){
+      if(!res.ok) return {occupied:[]};
+      return res.json();
+    }).then(function(data){
+      var occupied = (data && data.occupied) ? data.occupied : [];
+      // render all slots, marking occupied ones
+      if(slots.length === 0){
+        var li = document.createElement('li'); li.textContent = 'Nenhum horário disponível'; li.setAttribute('aria-disabled','true'); li.style.opacity = 0.7; timeList.appendChild(li); timeItems = [li]; return;
+      }
+      slots.forEach(function(t){
+        var li = document.createElement('li');
+        li.setAttribute('role','option');
+        li.setAttribute('data-value', t);
+        li.textContent = t;
+        if(occupied.indexOf(t) !== -1){
+          li.classList.add('occupied');
+          li.setAttribute('aria-disabled','true');
+          li.title = 'Ocupado';
+        } else {
+          li.addEventListener('click', function(){
+            var idx = Array.from(timeList.querySelectorAll('li')).indexOf(li);
+            selectTimeOption(idx);
+            currentTimeIndex = idx;
+          });
+          li.addEventListener('mouseenter', function(){ var idx = Array.from(timeList.querySelectorAll('li')).indexOf(li); setActiveTimeOption(idx); currentTimeIndex = idx; });
+        }
+        timeList.appendChild(li);
+      });
+      timeItems = Array.from(timeList.querySelectorAll('li'));
+    }).catch(function(){
+      // on error, render local slots as enabled
+      if(slots.length === 0){
+        var li = document.createElement('li'); li.textContent = 'Nenhum horário disponível'; li.setAttribute('aria-disabled','true'); li.style.opacity = 0.7; timeList.appendChild(li); timeItems = [li]; return;
+      }
+      slots.forEach(function(t){
+        var li = document.createElement('li');
+        li.setAttribute('role','option');
+        li.setAttribute('data-value', t);
+        li.textContent = t;
+        li.addEventListener('click', function(){ var idx = Array.from(timeList.querySelectorAll('li')).indexOf(li); selectTimeOption(idx); currentTimeIndex = idx; });
+        li.addEventListener('mouseenter', function(){ var idx = Array.from(timeList.querySelectorAll('li')).indexOf(li); setActiveTimeOption(idx); currentTimeIndex = idx; });
+        timeList.appendChild(li);
+      });
+      timeItems = Array.from(timeList.querySelectorAll('li'));
+    });
+  }
+
+  function setActiveTimeOption(index){
+    timeItems.forEach(function(it, i){
+      var sel = (i === index);
+      it.setAttribute('aria-selected', sel ? 'true' : 'false');
+      if(sel) it.scrollIntoView({block:'nearest'});
+    });
+  }
+
+  function selectTimeOption(index){
+    var it = timeItems[index];
+    if(!it) return;
+    var value = it.getAttribute('data-value');
+    if(timeInput) timeInput.value = value;
+    if(timeToggle){
+      var lbl = timeToggle.querySelector('#comboboxTimeLabel'); if(lbl) lbl.textContent = value;
+    }
+    closeTimeCombobox();
+  }
+
+  function openTimeCombobox(){ if(!timeCombobox) return; timeCombobox.classList.add('open'); timeCombobox.setAttribute('aria-expanded','true'); if(timeToggle) timeToggle.setAttribute('aria-expanded','true'); timeList.style.display='block'; }
+  function closeTimeCombobox(){ if(!timeCombobox) return; timeCombobox.classList.remove('open'); timeCombobox.setAttribute('aria-expanded','false'); if(timeToggle) timeToggle.setAttribute('aria-expanded','false'); if(timeList) timeList.style.display='none'; }
+
+  var currentTimeIndex = 0;
+  if(dateInput){
+    // set min to today in case template didn't
+    var today = new Date().toISOString().slice(0,10);
+    if(!dateInput.getAttribute('min')) dateInput.setAttribute('min', today);
+    // initial populate
+    populateTimeList(dateInput.value || today);
+    dateInput.addEventListener('change', function(){
+      populateTimeList(dateInput.value);
+      // reset hidden value and label
+      if(timeInput) timeInput.value = '';
+      if(timeToggle){ var lbl = timeToggle.querySelector('#comboboxTimeLabel'); if(lbl) lbl.textContent = 'Selecione um horário'; }
+    });
+  }
+
+  if(timeToggle && timeList){
+    // ensure timeItems is current
+    timeItems = timeList ? Array.from(timeList.querySelectorAll('li')) : [];
+    // helper to detect occupied
+    function isTimeItemOccupied(li){ return li.classList.contains('occupied') || li.getAttribute('aria-disabled') === 'true'; }
+    function findNextAvailableIndex(start, dir){ var i = start; while(i >= 0 && i < timeItems.length){ if(!isTimeItemOccupied(timeItems[i])) return i; i += dir; } return -1; }
+
+    if(timeItems.length > 0){
+      var firstAvail = findNextAvailableIndex(0, 1);
+      if(firstAvail === -1){ currentTimeIndex = 0; }
+      else { selectTimeOption(firstAvail); currentTimeIndex = firstAvail; }
+    }
+
+    timeToggle.addEventListener('click', function(e){ var expanded = timeCombobox.classList.contains('open'); if(expanded) closeTimeCombobox(); else openTimeCombobox(); setActiveTimeOption(currentTimeIndex); });
+
+    timeToggle.addEventListener('keydown', function(e){
+      if(e.key === 'ArrowDown'){
+        e.preventDefault(); openTimeCombobox(); var next = findNextAvailableIndex(currentTimeIndex+1, 1); if(next !== -1) currentTimeIndex = next; setActiveTimeOption(currentTimeIndex);
+      }
+      else if(e.key === 'ArrowUp'){
+        e.preventDefault(); openTimeCombobox(); var prev = findNextAvailableIndex(currentTimeIndex-1, -1); if(prev !== -1) currentTimeIndex = prev; setActiveTimeOption(currentTimeIndex);
+      }
+      else if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openTimeCombobox(); }
+    });
+
+    timeList.addEventListener('keydown', function(e){
+      if(e.key === 'ArrowDown'){
+        e.preventDefault(); var next = findNextAvailableIndex(currentTimeIndex+1, 1); if(next !== -1) currentTimeIndex = next; setActiveTimeOption(currentTimeIndex);
+      }
+      else if(e.key === 'ArrowUp'){
+        e.preventDefault(); var prev = findNextAvailableIndex(currentTimeIndex-1, -1); if(prev !== -1) currentTimeIndex = prev; setActiveTimeOption(currentTimeIndex);
+      }
+      else if(e.key === 'Enter'){
+        e.preventDefault(); if(!isTimeItemOccupied(timeItems[currentTimeIndex])) selectTimeOption(currentTimeIndex);
+      }
+      else if(e.key === 'Escape'){ e.preventDefault(); closeTimeCombobox(); timeToggle.focus(); }
+    });
+
+    document.addEventListener('click', function(e){ if(timeCombobox && !timeCombobox.contains(e.target)) closeTimeCombobox(); });
   }
 });

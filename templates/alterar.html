@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alterar Agendamento - Danilo Barbearia</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/">Danilo<span>Barbearia</span></a>
+      <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
+        <span class="hamburger"></span>
+      </button>
+      <nav class="site-nav" aria-label="Navegação principal">
+        <button class="nav-close" aria-label="Fechar menu">&times;</button>
+        <ul>
+          <li><a href="/agendamento">Agendar</a></li>
+          <li><a href="#servicos">Serviços</a></li>
+          <li><a href="#galeria">Galeria</a></li>
+          <li><a href="#horario">Horário</a></li>
+          <li><a href="#contato">Contato</a></li>
+          <li><a href="/meus_agendamentos">Meus Agendamentos</a></li>
+        </ul>
+      </nav>
+
+      {% if usuario %}
+      <div class="header-actions">
+        <span class="muted">Olá, {{ usuario.nome }}</span>
+        <form action="/logout" method="post" style="display:inline;margin-left:0.6rem">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn" type="submit">Sair</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </header>
+
+  {# Bloco para mensagens flash #}
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="container flash-messages">
+        {% for msg in messages %}
+          <div class="flash">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <main>
+    <div class="container agendamento-wrap">
+      <h1>Alterar agendamento</h1>
+      <div class="card">
+        <strong>{{ booking.service_label }}</strong>
+        <form action="/alterar" method="post" style="margin-top:0.75rem">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="booking_type" value="db">
+          <input type="hidden" name="booking_id" value="{{ booking_id }}">
+
+          <label for="dateInput">Data</label>
+          <input type="date" id="dateInput" name="date" value="{{ booking.date }}" min="{{ ('' ) }}" style="width:100%;padding:0.6rem;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text)">
+
+          <div style="margin-top:0.6rem">
+            <label for="timeList">Horário</label>
+            <div class="combobox" id="timeCombobox" role="combobox" aria-haspopup="listbox" aria-expanded="false">
+              <button type="button" class="combobox-toggle" aria-label="Abrir lista de horários" aria-expanded="false">
+                <span id="comboboxTimeLabel">{{ booking.time }}</span>
+                <span class="caret"></span>
+              </button>
+              <ul class="combobox-list" role="listbox" tabindex="-1" id="timeList">
+                <!-- preenchido por JS -->
+              </ul>
+              <input type="hidden" name="time" id="timeInput" value="{{ booking.time }}">
+            </div>
+          </div>
+
+          <div style="margin-top:0.75rem">
+            <button class="btn primary" type="submit">Salvar alteração</button>
+            <a class="btn" href="/meus_agendamentos">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="container">
+      <p>© <span id="ano"></span> Danilo Barbearia — Todos os direitos reservados</p>
+    </div>
+  </footer>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script>
+    // set minimum date to today
+    document.addEventListener('DOMContentLoaded', function(){
+      var dateEl = document.getElementById('dateInput');
+      var today = new Date().toISOString().slice(0,10);
+      if(dateEl && !dateEl.getAttribute('min')) dateEl.setAttribute('min', today);
+      // populate time slots for current date value (main.js has generator functions)
+      var evt = new Event('change');
+      if(dateEl) dateEl.dispatchEvent(evt);
+      // ensure combobox label shows current value
+      var lbl = document.getElementById('comboboxTimeLabel');
+      var timeInput = document.getElementById('timeInput');
+      if(lbl && timeInput) lbl.textContent = timeInput.value;
+    });
+  </script>
+</body>
+</html>
