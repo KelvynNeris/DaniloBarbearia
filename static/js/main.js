@@ -378,12 +378,24 @@ document.addEventListener('DOMContentLoaded', function(){
     // clear
     timeList.innerHTML = '';
     var slots = generateSlotsForDate(dateStr);
-    // fetch occupied slots from server
-    fetch('/ocupados?date='+encodeURIComponent(dateStr)).then(function(res){
+    // helper: normalize time strings to HH:MM
+    function normalizeTimeString(s){
+      if(!s) return '';
+      var m = String(s).match(/(\d{1,2}:\d{2})/);
+      if(!m) return '';
+      var parts = m[0].split(':');
+      var hh = parts[0].padStart(2,'0');
+      var mm = parts[1];
+      return hh + ':' + mm;
+    }
+
+    // fetch occupied slots from server (cache-busted)
+    fetch('/ocupados?date='+encodeURIComponent(dateStr)+'&_='+Date.now(), {cache:'no-store'}).then(function(res){
       if(!res.ok) return {occupied:[]};
       return res.json();
     }).then(function(data){
-      var occupied = (data && data.occupied) ? data.occupied : [];
+      var occupiedRaw = (data && data.occupied) ? data.occupied : [];
+      var occupied = occupiedRaw.map(normalizeTimeString);
       // render all slots, marking occupied ones
       if(slots.length === 0){
         var li = document.createElement('li'); li.textContent = 'Nenhum horário disponível'; li.setAttribute('aria-disabled','true'); li.style.opacity = 0.7; timeList.appendChild(li); timeItems = [li]; return;
@@ -393,7 +405,7 @@ document.addEventListener('DOMContentLoaded', function(){
         li.setAttribute('role','option');
         li.setAttribute('data-value', t);
         li.textContent = t;
-        if(occupied.indexOf(t) !== -1){
+        if(occupied.indexOf(normalizeTimeString(t)) !== -1){
           li.classList.add('occupied');
           li.setAttribute('aria-disabled','true');
           li.title = 'Ocupado';
@@ -407,7 +419,9 @@ document.addEventListener('DOMContentLoaded', function(){
         }
         timeList.appendChild(li);
       });
-      timeItems = Array.from(timeList.querySelectorAll('li'));
+          timeItems = Array.from(timeList.querySelectorAll('li'));
+          // after building items, refresh selection and keyboard state
+          try{ if(typeof updateTimeItemsState === 'function') updateTimeItemsState(); }catch(e){ /* ignore */ }
     }).catch(function(){
       // on error, render local slots as enabled
       if(slots.length === 0){
@@ -423,7 +437,57 @@ document.addEventListener('DOMContentLoaded', function(){
         timeList.appendChild(li);
       });
       timeItems = Array.from(timeList.querySelectorAll('li'));
+          // after building items, refresh selection and keyboard state
+          try{ if(typeof updateTimeItemsState === 'function') updateTimeItemsState(); }catch(e){ /* ignore */ }
     });
+  }
+
+  // Update timeItems state after populate: mark occupied items as non-focusable
+  function updateTimeItemsState(){
+    timeItems = timeList ? Array.from(timeList.querySelectorAll('li')) : [];
+    // mark occupied items non-focusable
+    timeItems.forEach(function(li){
+      var isOcc = li.classList.contains('occupied') || li.getAttribute('aria-disabled') === 'true';
+      if(isOcc){
+        li.setAttribute('aria-disabled','true');
+        try{ li.tabIndex = -1; }catch(e){}
+      } else {
+        li.removeAttribute('aria-disabled');
+        try{ li.tabIndex = 0; }catch(e){}
+      }
+    });
+
+    // preserve already-selected time if still available
+    var chosen = (timeInput && timeInput.value) ? timeInput.value : null;
+    if(chosen){
+      var idx = timeItems.findIndex(function(it){ return it.getAttribute('data-value') === chosen; });
+      if(idx !== -1){
+        var it = timeItems[idx];
+        if(!(it.classList.contains('occupied') || it.getAttribute('aria-disabled') === 'true')){
+          // still available
+          if(timeToggle){ var lbl = timeToggle.querySelector('#comboboxTimeLabel'); if(lbl) lbl.textContent = chosen; }
+          currentTimeIndex = idx;
+          return;
+        } else {
+          // chosen became occupied -> clear selection
+          if(timeInput) timeInput.value = '';
+          if(timeToggle){ var lbl = timeToggle.querySelector('#comboboxTimeLabel'); if(lbl) lbl.textContent = 'Selecione um horário'; }
+        }
+      }
+    }
+
+    // select first available
+    var firstAvail = -1;
+    for(var i=0;i<timeItems.length;i++){
+      if(!(timeItems[i].classList.contains('occupied') || timeItems[i].getAttribute('aria-disabled') === 'true')){ firstAvail = i; break; }
+    }
+    if(firstAvail !== -1){ selectTimeOption(firstAvail); currentTimeIndex = firstAvail; }
+    else {
+      // no available slots
+      if(timeToggle){ var lbl = timeToggle.querySelector('#comboboxTimeLabel'); if(lbl) lbl.textContent = 'Nenhum horário disponível'; }
+      if(timeInput) timeInput.value = '';
+      currentTimeIndex = 0;
+    }
   }
 
   function setActiveTimeOption(index){
@@ -460,6 +524,43 @@ document.addEventListener('DOMContentLoaded', function(){
       // reset hidden value and label
       if(timeInput) timeInput.value = '';
       if(timeToggle){ var lbl = timeToggle.querySelector('#comboboxTimeLabel'); if(lbl) lbl.textContent = 'Selecione um horário'; }
+    });
+  }
+
+  // Pre-submit check: verify chosen time is still available by querying /ocupados
+  var agendamentoForm = document.querySelector('form.service-select-row');
+  if(agendamentoForm){
+    agendamentoForm.addEventListener('submit', function(e){
+      var dateVal = (dateInput && dateInput.value) ? dateInput.value : '';
+      var timeVal = (timeInput && timeInput.value) ? timeInput.value : '';
+      if(!dateVal || !timeVal){
+        e.preventDefault();
+        alert('Por favor escolha uma data e horário disponíveis antes de confirmar.');
+        return;
+      }
+      // prevent immediate submit and re-check availability
+      e.preventDefault();
+      // normalize helper (same as in populateTimeList)
+      function normalizeTimeString(s){ if(!s) return ''; var m = String(s).match(/(\d{1,2}:\d{2})/); if(!m) return ''; var parts = m[0].split(':'); return parts[0].padStart(2,'0')+':'+parts[1]; }
+      var timeValNorm = normalizeTimeString(timeVal);
+      fetch('/ocupados?date='+encodeURIComponent(dateVal)+'&_='+Date.now(), {cache:'no-store'}).then(function(res){
+        if(!res.ok) return {occupied:[]};
+        return res.json();
+      }).then(function(data){
+        var occupiedRaw = (data && data.occupied) ? data.occupied : [];
+        var occupied = occupiedRaw.map(normalizeTimeString);
+        if(occupied.indexOf(timeValNorm) !== -1){
+          alert('Desculpe — este horário já foi reservado. Escolha outro.');
+          // refresh the time list to reflect current occupied slots
+          populateTimeList(dateVal);
+          return;
+        }
+        // still available -> submit the form normally
+        agendamentoForm.submit();
+      }).catch(function(){
+        // on error consult server-side, allow submit (server enforces uniqueness)
+        agendamentoForm.submit();
+      });
     });
   }
 

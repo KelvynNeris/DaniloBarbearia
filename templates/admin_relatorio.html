@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — Relatório</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+  <!-- report styles moved to static/styles/style.css -->
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/">Danilo<span>Barbearia</span></a>
+      <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
+        <span class="hamburger"></span>
+      </button>
+      <nav class="site-nav" aria-label="Navegação principal">
+        <button class="nav-close" aria-label="Fechar menu">&times;</button>
+        <ul>
+          <li><a href="/admin/change" class="{{ 'active' if request.path == '/admin/change' else '' }}">Minha conta</a></li>
+          <li><a href="/admin/agendas" class="{{ 'active' if request.path == '/admin/agendas' else '' }}">Agendas</a></li>
+          <li><a href="/admin/relatorio" class="{{ 'active' if request.path == '/admin/relatorio' else '' }}">Relatório</a></li>
+          <li><a href="/">Voltar</a></li>
+        </ul>
+      </nav>
+    </div>
+    <style>
+      .nav-toggle{background:transparent;border:0;padding:0.4rem;border-radius:8px;color:var(--text);display:inline-flex;align-items:center}
+      .nav-toggle:focus{outline:2px solid rgba(255,255,255,0.08)}
+      .hamburger{width:22px;height:2px;background:var(--text);display:block;position:relative}
+      .hamburger::before,.hamburger::after{content:'';position:absolute;left:0;width:22px;height:2px;background:var(--text);}
+      .hamburger::before{top:-6px}.hamburger::after{top:6px}
+
+      /* Hamburger open/close animation (transform into X) */
+      .hamburger, .hamburger::before, .hamburger::after {
+        transition: transform .2s ease, top .18s ease, opacity .18s ease, background .18s ease;
+        transform-origin: center;
+      }
+      .nav-toggle[aria-expanded="true"] .hamburger{ background: transparent; }
+      .nav-toggle[aria-expanded="true"] .hamburger::before{ top:0; transform: rotate(45deg); }
+      .nav-toggle[aria-expanded="true"] .hamburger::after{ top:0; transform: rotate(-45deg); }
+
+      .site-nav{position:fixed;right:0;top:0;height:100vh;width:70%;max-width:320px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.25));backdrop-filter:blur(6px);transform:translateX(100%);transition:transform .28s ease,opacity .2s;opacity:0;padding:3.5rem 1rem}
+      .site-nav.open{transform:translateX(0);opacity:1}
+      .site-nav ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0.75rem}
+      .site-nav a{color:var(--text);text-decoration:none;font-weight:600;padding:0.5rem 0;display:block}
+
+      /* botão fechar do menu móvel */
+      .site-nav .nav-close{position:absolute;right:1rem;top:0.8rem;background:transparent;border:0;color:var(--text);font-size:1.5rem;padding:0.25rem;cursor:pointer}
+      .site-nav .nav-close:focus{outline:2px solid rgba(255,255,255,0.08)}
+    </style>
+  </header>
+
+  <main class="container">
+    <div class="report-card">
+      <div class="report-head">
+        <div>
+          <h2>Relatório — Agendamentos</h2>
+          <div class="hint">Resumo de agendamentos e receita</div>
+        </div>
+        <form class="report-filters" action="/admin/relatorio" method="get">
+          <input name="start" class="search-input" type="date" value="{{ start }}">
+          <input name="end" class="search-input" type="date" value="{{ end }}">
+          <button class="btn" type="submit">Aplicar</button>
+        </form>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat">
+          <strong>Mais agendado</strong>
+          <div style="margin-top:8px">{% if most %}{{ most.label }} — <span class="muted">{{ most.count }} agendamentos</span>{% else %}—{% endif %}</div>
+        </div>
+        <div class="stat">
+          <strong>Receita no período</strong>
+          <div style="margin-top:8px">R$ {{ total_revenue }} </div>
+        </div>
+        <div class="stat">
+          <strong>Total de agendamentos</strong>
+          <div style="margin-top:8px">{{ bookings_count }}</div>
+        </div>
+      </div>
+
+      <div class="most-day-card">
+        <strong>Dia com mais agendamentos</strong>
+        <div class="most-day-value" style="margin-top:8px">
+          {% if most_day %}
+            <span class="muted">{{ most_day.day_num }} de {{ most_day.month }}</span> — <strong>{{ most_day.weekday }}</strong>
+            <div class="muted" style="margin-top:6px">{{ most_day.bookings }} agendamentos</div>
+          {% else %}
+            —
+          {% endif %}
+        </div>
+      </div>
+
+      <h3>Receita por dia</h3>
+      {% if per_day and per_day|length > 0 %}
+        <div style="overflow:auto">
+          <table class="agendas">
+            <thead>
+              <tr><th>Data</th><th>Agendamentos</th><th class="right">Receita</th></tr>
+            </thead>
+            <tbody>
+              {% for d in per_day %}
+              <tr>
+                <td>{{ d.date }}</td>
+                <td>{{ d.bookings }}</td>
+                <td class="right">R$ {{ d.revenue }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p>Nenhum dado para o período selecionado.</p>
+      {% endif %}
+
+      <div class="report-actions">
+        <a class="btn" href="/admin/agendas">Voltar às agendas</a>
+      </div>
+    </div>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

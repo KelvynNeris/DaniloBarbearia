@@ -3,48 +3,98 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Alterar dados do Administrador — Barbearia</title>
-  <link rel="stylesheet" href="/static/styles/style.css">
+  <title>Alterar dados do Administrador — Danilo Barbearia</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+  <style>
+    .auth-card{max-width:640px;margin:18px auto;padding:26px;border-radius:14px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12));box-shadow:0 14px 40px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03)}
+    .form-row{margin-bottom:12px}
+    label{display:block;margin-bottom:6px;color:var(--muted);font-weight:600}
+    input[type="text"],input[type="password"],input[type="tel"]{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);font-size:15px}
+    .readonly{padding:10px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.01),rgba(0,0,0,0.04));color:var(--text)}
+    .form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+    .btn.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--text);padding:10px 12px;border-radius:10px}
+    .btn.primary{background:var(--accent);color:#071124;padding:10px 14px;border-radius:10px}
+    .hint{font-size:0.95rem;color:var(--muted)}
+  </style>
 </head>
 <body>
   <header class="site-header">
-    <div class="container">
-      <h1>Alterar dados do Administrador</h1>
-      <a href="/" class="btn-link">Voltar</a>
+    <div class="container header-inner">
+      <a class="brand" href="/">Danilo<span>Barbearia</span></a>
+      <nav class="site-nav">
+        <ul>
+          <li><a href="/admin/agendas">Agendas</a></li>
+          <li><a href="/">Voltar</a></li>
+        </ul>
+      </nav>
     </div>
   </header>
 
-  <main class="container">
-    <section class="card">
-      <form method="post" action="/admin/change">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <div class="field-row">
-          <label>Usuário</label>
-          <div class="readonly">{{ admin.username }}</div>
-        </div>
-        <div class="field-row">
-          <label for="name">Nome completo</label>
-          <input id="name" name="name" required maxlength="255" value="{{ admin.name }}">
-        </div>
-        <div class="field-row">
-          <label for="phone">Telefone</label>
-          <input id="phone" name="phone" type="tel" maxlength="20" value="{{ admin.phone }}">
-        </div>
-        <div class="field-row">
-          <label for="password">Nova senha (opcional)</label>
-          <input id="password" name="password" type="password" minlength="6" placeholder="Deixe vazio para manter a mesma">
-        </div>
-        <div class="field-row">
-          <label for="password2">Confirme nova senha</label>
-          <input id="password2" name="password2" type="password" minlength="6">
-        </div>
-        <div class="actions">
-          <button type="submit" class="btn">Salvar alterações</button>
-        </div>
-      </form>
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="container flash-messages">
+        {% for msg in messages %}
+          <div class="flash">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <main>
+    <section class="container">
+      <div class="auth-card">
+        <h2>Atualize suas informações</h2>
+        <p class="hint">Por segurança defina uma nova senha e confirme seu telefone.</p>
+        <form method="post" action="/admin/change" id="adminChangeForm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="form-row">
+            <label>Usuário</label>
+            <div class="readonly">{{ admin.username }}</div>
+          </div>
+          <div class="form-row">
+            <label for="name">Nome completo</label>
+            <input id="name" name="name" required maxlength="255" value="{{ admin.name }}">
+          </div>
+          <div class="form-row">
+            <label for="phone">Telefone</label>
+            <input id="phone" name="phone" type="tel" required maxlength="20" value="{{ admin.phone }}" placeholder="(xx) xxxxx-xxxx">
+            <div class="hint">Formato: (xx) xxxxx-xxxx</div>
+          </div>
+          <div class="form-row">
+            <label for="password">Nova senha</label>
+            <input id="password" name="password" type="password" required minlength="6" placeholder="Nova senha">
+          </div>
+          <div class="form-row">
+            <label for="password2">Confirme nova senha</label>
+            <input id="password2" name="password2" type="password" required minlength="6">
+          </div>
+          <div class="form-actions">
+            <a class="btn secondary" href="/admin/agendas">Cancelar</a>
+            <button type="submit" class="btn primary">Salvar alterações</button>
+          </div>
+        </form>
+      </div>
     </section>
   </main>
 
-  <script src="/static/js/main.js"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script>
+    (function(){
+      var tel = document.getElementById('phone');
+      function fmt(v){var d=v.replace(/\D/g,'').slice(0,11); if(d.length<=2) return '('+d; if(d.length<=6) return '('+d.slice(0,2)+') '+d.slice(2); if(d.length<=10) return '('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6); return '('+d.slice(0,2)+') '+d.slice(2,7)+'-'+d.slice(7);} 
+      if(tel){ tel.addEventListener('input', function(){ tel.value = fmt(tel.value); }); tel.addEventListener('blur', function(){ var d=(tel.value||'').replace(/\D/g,''); if(d.length!==11) tel.classList.add('invalid'); else tel.classList.remove('invalid'); }); }
+      var form = document.getElementById('adminChangeForm');
+      if(form){ form.addEventListener('submit', function(e){ var pwd=document.getElementById('password'), p2=document.getElementById('password2'); if(!pwd.value || pwd.value.length<6){ e.preventDefault(); alert('A nova senha é obrigatória (mínimo 6 caracteres).'); return; } if(pwd.value !== p2.value){ e.preventDefault(); alert('As senhas não coincidem.'); return; } var d=(tel.value||'').replace(/\D/g,''); if(d.length!==11){ e.preventDefault(); alert('Telefone inválido. Use o formato (xx) xxxxx-xxxx.'); return; }
+            // normalize phone to include country code before submit
+            try{
+              var norm = '';
+              if(d.length === 11){ norm = '+55' + d; }
+              else if(d.length > 11 && d.indexOf('55') === 0){ norm = '+' + d; }
+              else { norm = '+' + d; }
+              tel.value = norm;
+            }catch(err){ /* ignore */ }
+          }); }
+    })();
+  </script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, session, flash, jsonify
 import mysql.connector
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from conexao import Conexao
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -108,14 +108,17 @@ def admin_login():
 
     username = (request.form.get('username') or '').strip()
     password = request.form.get('password') or ''
-    if not username or not password:
-        flash('Preencha usuário e senha.')
+    phone_raw = request.form.get('phone') or ''
+    if not username or not password or not phone_raw.strip():
+        flash('Preencha usuário, telefone e senha.')
         return redirect('/admin/login')
+    phone = normalize_phone(phone_raw)
 
     try:
         conn = Conexao.conectar()
         cur = conn.cursor(dictionary=True)
-        cur.execute('SELECT id, username, name, phone, password_hash FROM admins WHERE username = %s LIMIT 1', (username,))
+        # include first_login flag in query
+        cur.execute('SELECT id, username, name, phone, password_hash, IFNULL(first_login,0) AS first_login FROM admins WHERE username = %s LIMIT 1', (username,))
         row = cur.fetchone()
         cur.close(); conn.close()
         if not row:
@@ -124,19 +127,31 @@ def admin_login():
         if not check_password_hash(row.get('password_hash',''), password):
             flash('Usuário/senha inválidos.')
             return redirect('/admin/login')
+        # validate phone matches stored admin phone
+        stored_phone = row.get('phone') or ''
+        # normalize stored phone before comparing so formats like '+55 (11) 91234-5678' match
+        try:
+            stored_phone_norm = normalize_phone(stored_phone) if (stored_phone and str(stored_phone).strip()) else ''
+        except Exception:
+            stored_phone_norm = stored_phone
+        if phone != stored_phone_norm:
+            flash('Telefone inválido para este usuário.')
+            return redirect('/admin/login')
 
         # login successful: store admin id in session
         session['admin_id'] = row.get('id')
         session['admin_username'] = row.get('username')
 
-        # detect default predefined admin values to force change on first login
-        default_raw_phone = '+55 (99) 99999-9999'
-        default_phone_norm = normalize_phone(default_raw_phone)
-        if ( (row.get('name') or '').strip().lower() == 'adm' and (row.get('phone') or '') == default_phone_norm ):
-            return redirect('/admin/change')
+        # If admin hasn't completed first-login actions, redirect to change page
+        try:
+            if int(row.get('first_login') or 0) == 0:
+                flash('Primeiro login detectado — por favor atualize seus dados.')
+                return redirect('/admin/change')
+        except Exception:
+            pass
 
         flash('Login de administrador bem-sucedido.')
-        return redirect('/')
+        return redirect('/admin/agendas')
     except Exception:
         flash('Erro ao verificar credenciais (banco).')
         return redirect('/admin/login')
@@ -150,21 +165,31 @@ def admin_change():
         flash('Faça login como administrador.')
         return redirect('/admin/login')
 
+    # fetch admin first_login flag to determine access
+    try:
+        conn = Conexao.conectar()
+        cur = conn.cursor(dictionary=True)
+        cur.execute('SELECT id, username, name, phone, IFNULL(first_login,0) AS first_login FROM admins WHERE id = %s', (admin_id,))
+        admin_row = cur.fetchone()
+        cur.close(); conn.close()
+    except Exception:
+        flash('Erro ao acessar o banco.')
+        return redirect('/')
+
+    if not admin_row:
+        flash('Administrador não encontrado.')
+        return redirect('/admin/login')
+
+    # if first_login == 1, make this page inaccessible
+    try:
+        if int(admin_row.get('first_login') or 0) == 1:
+            flash('A página de alteração não está disponível após o primeiro login.')
+            return redirect('/admin/agendas')
+    except Exception:
+        pass
+
     if request.method == 'GET':
-        # fetch current admin values
-        try:
-            conn = Conexao.conectar()
-            cur = conn.cursor(dictionary=True)
-            cur.execute('SELECT id, username, name, phone FROM admins WHERE id = %s', (admin_id,))
-            row = cur.fetchone()
-            cur.close(); conn.close()
-            if not row:
-                flash('Administrador não encontrado.')
-                return redirect('/admin/login')
-            return render_template('admin_change.html', admin=row, csrf_token=session.get('csrf_token'))
-        except Exception:
-            flash('Erro ao acessar o banco.')
-            return redirect('/')
+        return render_template('admin_change.html', admin=admin_row, csrf_token=session.get('csrf_token'))
 
     # POST: apply changes
     form_token = request.form.get('csrf_token')
@@ -177,7 +202,10 @@ def admin_change():
     password = request.form.get('password') or ''
     password2 = request.form.get('password2') or ''
 
-    if password and password != password2:
+    if not password:
+        flash('Senha obrigatória.')
+        return redirect('/admin/change')
+    if password != password2:
         flash('As senhas não coincidem.')
         return redirect('/admin/change')
 
@@ -187,14 +215,15 @@ def admin_change():
     try:
         conn = Conexao.conectar()
         cur = conn.cursor()
+        # mark first_login = 1 after admin updates their info
         if password:
             pwd_hash = generate_password_hash(password)
-            cur.execute('UPDATE admins SET name=%s, phone=%s, password_hash=%s WHERE id = %s', (name, phone, pwd_hash, admin_id))
+            cur.execute('UPDATE admins SET name=%s, phone=%s, password_hash=%s, first_login=1 WHERE id = %s', (name, phone, pwd_hash, admin_id))
         else:
-            cur.execute('UPDATE admins SET name=%s, phone=%s WHERE id = %s', (name, phone, admin_id))
+            cur.execute('UPDATE admins SET name=%s, phone=%s, first_login=1 WHERE id = %s', (name, phone, admin_id))
         conn.commit(); cur.close(); conn.close()
         flash('Dados do administrador atualizados.')
-        return redirect('/')
+        return redirect('/admin/agendas')
     except Exception:
         flash('Erro ao atualizar admin (banco).')
         return redirect('/admin/change')
@@ -244,34 +273,6 @@ def cadastro():
         if u and normalize_phone(u.get('numero')) == numero:
             return redirect('/meus_agendamentos')
 
-
-        @app.route('/ocupados')
-        def ocupados():
-            # retorna JSON com lista de horários ocupados para uma data YYYY-MM-DD
-            date_str = request.args.get('date')
-            if not date_str:
-                return jsonify({'error': 'missing date'}), 400
-            occupied = []
-            try:
-                conn = Conexao.conectar()
-                cur = conn.cursor()
-                cur.execute("SELECT time FROM agendamentos WHERE date = %s", (date_str,))
-                rows = cur.fetchall()
-                for r in rows:
-                    # r may be tuple
-                    t = r[0] if isinstance(r, (list, tuple)) else r
-                    # time might come as datetime.time; convert to HH:MM
-                    try:
-                        s = t.strftime('%H:%M')
-                    except Exception:
-                        s = str(t)
-                    # normalize to 'HH:MM'
-                    occupied.append(s[:5])
-                cur.close(); conn.close()
-            except Exception:
-                # on DB error, return empty array (frontend will still show available slots)
-                occupied = []
-            return jsonify({'occupied': occupied})
 
     # checar no banco
     try:
@@ -676,6 +677,126 @@ def logout():
     flash('Você saiu com sucesso.')
     return redirect('/')
 
+
+@app.route('/admin/agendas')
+def admin_agendas():
+    # página para administrador ver todas as agendas detalhadamente
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+
+    agendas = []
+    try:
+        conn = Conexao.conectar()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, date, time, client_name, client_phone, service_key, created_at FROM agendamentos ORDER BY date DESC, time DESC")
+        rows = cur.fetchall()
+        for r in rows:
+            svc = SERVICES.get(r.get('service_key'), {})
+            agendas.append({
+                'id': r.get('id'),
+                'date': r.get('date'),
+                'time': r.get('time'),
+                'service_label': svc.get('label', r.get('service_key')),
+                'price': svc.get('price'),
+                'client_name': r.get('client_name'),
+                'client_phone': r.get('client_phone'),
+                'created_at': r.get('created_at')
+            })
+        cur.close(); conn.close()
+    except Exception:
+        flash('Erro ao acessar agendamentos (banco).')
+
+    return render_template('admin_agendas.html', agendas=agendas, csrf_token=session.get('csrf_token'), usuario=session.get('usuario'))
+
+
+@app.route('/admin/relatorio')
+def admin_relatorio():
+    # relatório administrativo: serviço mais agendado, receita por período e por dia
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+
+    # período (desde start até end). Parâmetros: ?start=YYYY-MM-DD&end=YYYY-MM-DD
+    try:
+        end_date = request.args.get('end') or date.today().isoformat()
+        start_date = request.args.get('start') or (date.today() - timedelta(days=30)).isoformat()
+    except Exception:
+        start_date = (date.today() - timedelta(days=30)).isoformat()
+        end_date = date.today().isoformat()
+
+    most_booked = None
+    per_day = {}
+    total_revenue = 0
+    bookings_count = 0
+    try:
+        conn = Conexao.conectar()
+        cur = conn.cursor()
+        # counts per service in period
+        cur.execute("SELECT service_key, COUNT(*) AS cnt FROM agendamentos WHERE date BETWEEN %s AND %s GROUP BY service_key", (start_date, end_date))
+        rows = cur.fetchall()
+        svc_counts = {}
+        for r in rows:
+            key = r[0]
+            cnt = int(r[1])
+            svc_counts[key] = cnt
+
+        if svc_counts:
+            best = max(svc_counts.items(), key=lambda x: x[1])
+            most_booked = {'service_key': best[0], 'label': SERVICES.get(best[0], {}).get('label', best[0]), 'count': best[1]}
+
+        # revenue per day (group by date and service_key, then multiply by price)
+        cur.execute("SELECT date, service_key, COUNT(*) FROM agendamentos WHERE date BETWEEN %s AND %s GROUP BY date, service_key ORDER BY date ASC", (start_date, end_date))
+        rows = cur.fetchall()
+        for r in rows:
+            d = r[0]
+            key = r[1]
+            cnt = int(r[2])
+            price = SERVICES.get(key, {}).get('price', 0)
+            rev = cnt * price
+            per_day.setdefault(str(d), {'revenue': 0, 'bookings': 0})
+            per_day[str(d)]['revenue'] += rev
+            per_day[str(d)]['bookings'] += cnt
+            total_revenue += rev
+            bookings_count += cnt
+
+        cur.close(); conn.close()
+    except Exception:
+        flash('Erro ao gerar relatório (banco).')
+
+    # convert per_day to sorted list
+    per_day_list = sorted([{'date': k, 'revenue': v['revenue'], 'bookings': v['bookings']} for k, v in per_day.items()], key=lambda x: x['date'])
+
+    # determine the single day with most bookings (date string 'YYYY-MM-DD')
+    most_day = None
+    try:
+        if per_day_list:
+            best = max(per_day_list, key=lambda x: int(x.get('bookings', 0)))
+            try:
+                dt = datetime.strptime(best['date'], '%Y-%m-%d').date()
+                weekdays_pt = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
+                months_pt = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+                # datetime.weekday(): Monday=0
+                weekday_name = weekdays_pt[dt.weekday()]
+                month_name = months_pt[dt.month - 1]
+                most_day = {
+                    'date': best['date'],
+                    'day_num': dt.day,
+                    'month': month_name,
+                    'month_num': dt.month,
+                    'weekday': weekday_name,
+                    'bookings': int(best.get('bookings', 0)),
+                    'revenue': best.get('revenue', 0)
+                }
+            except Exception:
+                most_day = {'date': best.get('date'), 'bookings': int(best.get('bookings', 0)), 'revenue': best.get('revenue', 0)}
+    except Exception:
+        most_day = None
+
+    return render_template('admin_relatorio.html', most=most_booked, per_day=per_day_list, most_day=most_day, total_revenue=total_revenue, bookings_count=bookings_count, start=start_date, end=end_date, csrf_token=session.get('csrf_token'), usuario=session.get('usuario'))
+
 if __name__ == "__main__":
     # Ensure a default predefined admin exists (username 'adm', name 'adm', phone '+55 (99) 99999-9999', password '123')
     def ensure_default_admin():
@@ -686,13 +807,23 @@ if __name__ == "__main__":
         try:
             conn = Conexao.conectar()
             cur = conn.cursor()
+            # ensure first_login column exists (MySQL 8+ supports IF NOT EXISTS)
+            try:
+                cur.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS first_login TINYINT(1) DEFAULT 0")
+            except Exception:
+                # fallback: attempt to add column without IF NOT EXISTS (ignore errors)
+                try:
+                    cur.execute("ALTER TABLE admins ADD COLUMN first_login TINYINT(1) DEFAULT 0")
+                except Exception:
+                    pass
+
             cur.execute('SELECT id FROM admins WHERE username = %s LIMIT 1', (default_username,))
             row = cur.fetchone()
             if not row:
                 pwd_hash = generate_password_hash(default_password)
                 phone_norm = normalize_phone(default_phone_raw)
                 name_norm = normalize_name(default_name)
-                cur.execute('INSERT INTO admins (username, name, phone, password_hash) VALUES (%s,%s,%s,%s)',
+                cur.execute('INSERT INTO admins (username, name, phone, password_hash, first_login) VALUES (%s,%s,%s,%s,0)',
                             (default_username, name_norm, phone_norm, pwd_hash))
                 conn.commit()
             cur.close(); conn.close()

@@ -3,36 +3,89 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Login do Administrador — Barbearia</title>
-  <link rel="stylesheet" href="/static/styles/style.css">
+  <title>Login do Administrador — Danilo Barbearia</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+  <style>
+    /* small overrides to align inputs with site theme */
+    .auth-hero{padding:3.25rem 0;text-align:center}
+    .auth-card{max-width:480px;margin:0 auto;padding:28px;border-radius:14px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12));box-shadow:0 14px 40px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03)}
+    .auth-card h2{margin:0 0 8px}
+    .form-row{margin-bottom:12px}
+    label{display:block;margin-bottom:6px;color:var(--muted);font-weight:600}
+    input[type="text"],input[type="password"],input[type="tel"]{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);font-size:15px}
+    .form-actions{display:flex;justify-content:space-between;align-items:center;margin-top:14px}
+    .btn.primary{background:var(--accent);color:#071124;padding:10px 14px;border-radius:10px}
+    .hint{font-size:0.92rem;color:var(--muted)}
+  </style>
 </head>
 <body>
   <header class="site-header">
-    <div class="container">
-      <h1>Login do Administrador</h1>
-      <a href="/" class="btn-link">Voltar</a>
+    <div class="container header-inner">
+      <a class="brand" href="/">Danilo<span>Barbearia</span></a>
+      <nav class="header-actions">
+        <a class="btn" href="/">Voltar</a>
+      </nav>
     </div>
   </header>
 
-  <main class="container">
-    <section class="card">
-      <form method="post" action="/admin/login">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <div class="field-row">
-          <label for="username">Usuário</label>
-          <input id="username" name="username" required maxlength="150" placeholder="adm">
-        </div>
-        <div class="field-row">
-          <label for="password">Senha</label>
-          <input id="password" name="password" type="password" required minlength="1" placeholder="Senha">
-        </div>
-        <div class="actions">
-          <button type="submit" class="btn">Entrar</button>
-        </div>
-      </form>
+  {# flash messages #}
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="container flash-messages">
+        {% for msg in messages %}
+          <div class="flash">{{ msg }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <main>
+    <section class="hero auth-hero">
+      <div class="container">
+        <h1 style="margin-bottom:8px">Área do Administrador</h1>
+        <p class="hint">Acesse a gestão de agendas e configurações</p>
+      </div>
+    </section>
+
+    <section class="container">
+      <div class="auth-card">
+        <h2>Entrar</h2>
+        <p class="hint">Informe suas credenciais de administrador</p>
+        <form method="post" action="/admin/login" id="adminLoginForm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="form-row">
+            <label for="username">Usuário</label>
+            <input id="username" name="username" required maxlength="150" placeholder="adm">
+          </div>
+          <div class="form-row">
+            <label for="loginPhone">Telefone</label>
+            <input id="loginPhone" name="phone" type="tel" required maxlength="20" placeholder="(xx) xxxxx-xxxx">
+          </div>
+          <div class="form-row">
+            <label for="password">Senha</label>
+            <input id="password" name="password" type="password" required minlength="1" placeholder="Senha">
+          </div>
+          <div class="form-actions">
+            <a class="btn" href="/">Cancelar</a>
+            <button type="submit" class="btn primary">Entrar</button>
+          </div>
+        </form>
+      </div>
     </section>
   </main>
 
-  <script src="/static/js/main.js"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script>
+    (function(){
+      var el = document.getElementById('loginPhone');
+      if(!el) return;
+      function fmt(v){var d=v.replace(/\D/g,'').slice(0,11); if(d.length<=2) return '('+d; if(d.length<=6) return '('+d.slice(0,2)+') '+d.slice(2); if(d.length<=10) return '('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6); return '('+d.slice(0,2)+') '+d.slice(2,7)+'-'+d.slice(7);} 
+      el.addEventListener('input', function(){ el.value = fmt(el.value); });
+      document.getElementById('adminLoginForm').addEventListener('submit', function(e){
+        var digits = (el.value||'').replace(/\D/g,'');
+        if(digits.length !== 11){ e.preventDefault(); alert('Telefone inválido. Use o formato (xx) xxxxx-xxxx.'); }
+      });
+    })();
+  </script>
 </body>
 </html>
