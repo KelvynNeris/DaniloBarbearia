@@ -235,3 +235,21 @@ body{
 .most-day-card strong{display:block;color:var(--muted);font-size:0.95rem}
 .most-day-value{font-size:1.1rem;margin-top:6px}
 .most-day-value .muted{color:var(--muted);font-weight:700;margin-right:6px}
+
+/* Report charts */
+.report-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:0 0 22px}
+.chart-card{min-width:0;padding:14px;border:1px solid rgba(255,255,255,0.03);border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,0.015),rgba(0,0,0,0.04))}
+.chart-heading{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px}
+.chart-heading h4{margin:0;font-size:1rem}
+.bar-chart{height:190px;display:flex;align-items:stretch;gap:7px;overflow-x:auto;padding:0 2px}
+.bar-column{display:flex;flex:1 0 34px;min-width:34px;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px}
+.bar-value{min-height:16px;color:var(--muted);font-size:.7rem;white-space:nowrap;writing-mode:vertical-rl;transform:rotate(180deg)}
+.bar-track{height:130px;width:100%;display:flex;align-items:flex-end;border-bottom:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.015)}
+.bar-fill{width:100%;min-height:2px;border-radius:4px 4px 0 0;transition:height .35s ease}
+.bookings-bar{background:var(--accent)}
+.revenue-bar{background:#38bdf8}
+.bar-label{color:var(--muted);font-size:.7rem;white-space:nowrap}
+
+@media(max-width:700px){
+  .report-charts{grid-template-columns:1fr}
+}

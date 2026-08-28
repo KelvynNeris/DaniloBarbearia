@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, session, flash, jsonify
 import mysql.connector
 import uuid
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from conexao import Conexao
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -356,7 +356,7 @@ def confirmar():
         'price': svc['price'],
         'date': date_str,
         'time': time_str,
-        'created_at': datetime.utcnow().isoformat() + 'Z'
+        'created_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
     }
 
     # Tentar persistir no banco MySQL (conceito). Se falhar, cai para armazenamento em sessão.
@@ -768,6 +768,8 @@ def admin_relatorio():
 
     # convert per_day to sorted list
     per_day_list = sorted([{'date': k, 'revenue': v['revenue'], 'bookings': v['bookings']} for k, v in per_day.items()], key=lambda x: x['date'])
+    max_bookings = max((item['bookings'] for item in per_day_list), default=0)
+    max_revenue = max((item['revenue'] for item in per_day_list), default=0)
 
     # determine the single day with most bookings (date string 'YYYY-MM-DD')
     most_day = None
@@ -795,7 +797,7 @@ def admin_relatorio():
     except Exception:
         most_day = None
 
-    return render_template('admin_relatorio.html', most=most_booked, per_day=per_day_list, most_day=most_day, total_revenue=total_revenue, bookings_count=bookings_count, start=start_date, end=end_date, csrf_token=session.get('csrf_token'), usuario=session.get('usuario'))
+    return render_template('admin_relatorio.html', most=most_booked, per_day=per_day_list, max_bookings=max_bookings, max_revenue=max_revenue, most_day=most_day, total_revenue=total_revenue, bookings_count=bookings_count, start=start_date, end=end_date, csrf_token=session.get('csrf_token'), usuario=session.get('usuario'))
 
 if __name__ == "__main__":
     # Ensure a default predefined admin exists (username 'adm', name 'adm', phone '+55 (99) 99999-9999', password '123')

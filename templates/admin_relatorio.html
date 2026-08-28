@@ -94,6 +94,39 @@
 
       <h3>Receita por dia</h3>
       {% if per_day and per_day|length > 0 %}
+        <div class="report-charts" aria-label="Gráficos do relatório">
+          <section class="chart-card" aria-labelledby="bookings-chart-title">
+            <div class="chart-heading">
+              <h4 id="bookings-chart-title">Agendamentos por dia</h4>
+              <span class="muted">Total: {{ bookings_count }}</span>
+            </div>
+            <div class="bar-chart" role="img" aria-label="Agendamentos por dia no período selecionado">
+              {% for d in per_day %}
+                <div class="bar-column" title="{{ d.date }}: {{ d.bookings }} agendamentos">
+                  <span class="bar-value">{{ d.bookings }}</span>
+                  <div class="bar-track"><div class="bar-fill bookings-bar" style="height: {{ (d.bookings / max_bookings * 100)|round(1) if max_bookings else 0 }}%"></div></div>
+                  <span class="bar-label">{{ d.date[8:10] }}/{{ d.date[5:7] }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          </section>
+
+          <section class="chart-card" aria-labelledby="revenue-chart-title">
+            <div class="chart-heading">
+              <h4 id="revenue-chart-title">Receita por dia</h4>
+              <span class="muted">Total: R$ {{ total_revenue }}</span>
+            </div>
+            <div class="bar-chart" role="img" aria-label="Receita por dia no período selecionado">
+              {% for d in per_day %}
+                <div class="bar-column" title="{{ d.date }}: R$ {{ d.revenue }}">
+                  <span class="bar-value">R$ {{ d.revenue }}</span>
+                  <div class="bar-track"><div class="bar-fill revenue-bar" style="height: {{ (d.revenue / max_revenue * 100)|round(1) if max_revenue else 0 }}%"></div></div>
+                  <span class="bar-label">{{ d.date[8:10] }}/{{ d.date[5:7] }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          </section>
+        </div>
         <div style="overflow:auto">
           <table class="agendas">
             <thead>

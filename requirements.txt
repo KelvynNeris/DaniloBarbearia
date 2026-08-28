@@ -1,0 +1,7 @@
+Flask
+mysql-connector-python
+azure-storage-blob
+python-dateutil
+python-dotenv
+pytz
+gunicorn
