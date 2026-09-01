@@ -55,19 +55,23 @@ def generate_allowed_slots_for_date_obj(d):
 
 def normalize_phone(raw):
     """Normalize phone numbers to a canonical form for storage and comparison.
-    Rules (simple): strip non-digits. If 10 or 11 digits, prefix with +55.
-    If already includes country (more than 11 and starts with 55), prefix with +.
-    Returns normalized string starting with '+' and digits, or original trimmed if empty.
+    Rules: strip non-digits, then ensure a single +55 prefix.
+    - 10 digits -> +55 + digits
+    - 11 digits starting with 55 -> + + digits
+    - 11 digits without 55 -> +55 + digits
+    - >11 digits starting with 55 -> + + digits
     """
     if not raw:
         return ''
-    digits = ''.join(ch for ch in raw if ch.isdigit())
+    digits = ''.join(ch for ch in str(raw) if ch.isdigit())
     if not digits:
         return ''
-    if len(digits) in (10, 11):
-        return '+55' + digits
-    if len(digits) > 11 and digits.startswith('55'):
+    if digits.startswith('55'):
         return '+' + digits
+    if len(digits) == 10:
+        return '+55' + digits
+    if len(digits) == 11:
+        return '+55' + digits
     return '+' + digits
 
 
