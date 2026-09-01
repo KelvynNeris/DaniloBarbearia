@@ -1,10 +1,12 @@
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
 import smtplib
 import time
+import urllib.request
 import uuid
 from datetime import datetime, date, timedelta, timezone
 from email.mime.text import MIMEText
@@ -443,24 +445,87 @@ def build_whatsapp_confirmation_link(booking):
     return f"https://wa.me/{barber_phone}?text={quote(msg)}"
 
 
-def send_admin_booking_notification(booking):
-    """Envia um e-mail para o admin avisando de um novo agendamento — não
-    depende do cliente fazer nada. Configurável via variáveis de ambiente
-    (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, ADMIN_NOTIFY_EMAIL).
-    Se não estiver configurado, simplesmente não faz nada (o agendamento
-    continua funcionando normalmente sem essa notificação).
-    """
+def _send_email_via_resend(subject, body, to_email):
+    """Envia e-mail via API HTTP da Resend (https://resend.com) — usa HTTPS
+    normal, então funciona mesmo em hospedagens que bloqueiam conexões SMTP
+    de saída (comum em provedores de nuvem). Retorna True se enviou."""
+    api_key = os.getenv('RESEND_API_KEY')
+    if not api_key:
+        return False
+
+    from_email = os.getenv('RESEND_FROM', 'onboarding@resend.dev')
+    payload = json.dumps({
+        'from': from_email,
+        'to': [to_email],
+        'subject': subject,
+        'text': body,
+    }).encode('utf-8')
+    req = urllib.request.Request(
+        'https://api.resend.com/emails',
+        data=payload,
+        headers={
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json',
+        },
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if 200 <= resp.status < 300:
+                app.logger.info(f"E-mail de notificação enviado via Resend para {to_email}.")
+                return True
+            app.logger.error(f"Resend retornou status {resp.status} ao tentar enviar notificação.")
+            return False
+    except Exception:
+        app.logger.exception("Falha ao enviar e-mail de notificação via Resend.")
+        return False
+
+
+def _send_email_via_smtp(subject, body, to_email):
+    """Envia e-mail via SMTP direto (Gmail etc). Funciona bem localmente e em
+    hosts que não bloqueiam a porta SMTP de saída. Retorna True se enviou."""
     smtp_host = os.getenv('SMTP_HOST')
     smtp_user = os.getenv('SMTP_USER')
     smtp_password = os.getenv('SMTP_PASSWORD')
-    notify_email = os.getenv('ADMIN_NOTIFY_EMAIL') or smtp_user
-    if not smtp_host or not smtp_user or not smtp_password or not notify_email:
-        return  # notificação por e-mail não configurada — segue sem erro
+    if not smtp_host or not smtp_user or not smtp_password:
+        return False
 
     smtp_port = int(os.getenv('SMTP_PORT', '587'))
     smtp_from = os.getenv('SMTP_FROM') or smtp_user
-    usuario = (booking or {}).get('usuario') or {}
+    msg = MIMEText(body, 'plain', 'utf-8')
+    msg['Subject'] = subject
+    msg['From'] = smtp_from
+    msg['To'] = to_email
 
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_from, [to_email], msg.as_string())
+        app.logger.info(f"E-mail de notificação enviado via SMTP para {to_email}.")
+        return True
+    except Exception:
+        # Nunca deixar a notificação por e-mail derrubar o fluxo de agendamento —
+        # mas registra o erro real no log pra dar pra diagnosticar depois
+        # (ex.: provedor de hospedagem bloqueando conexões SMTP de saída).
+        app.logger.exception("Falha ao enviar e-mail de notificação via SMTP.")
+        return False
+
+
+def send_admin_booking_notification(booking):
+    """Avisa o admin de um novo agendamento por e-mail — não depende do
+    cliente fazer nada. Tenta primeiro via API HTTP (Resend, configurável por
+    RESEND_API_KEY), que funciona mesmo com a porta SMTP bloqueada; se não
+    estiver configurada, cai para SMTP direto (SMTP_HOST/SMTP_USER/
+    SMTP_PASSWORD). Se nenhuma das duas estiver configurada, não faz nada —
+    o agendamento continua funcionando normalmente sem a notificação.
+    """
+    notify_email = os.getenv('ADMIN_NOTIFY_EMAIL') or os.getenv('SMTP_USER')
+    if not notify_email:
+        return
+
+    usuario = (booking or {}).get('usuario') or {}
+    subject = f"Novo agendamento — {usuario.get('nome', 'cliente')} ({booking.get('time')})"
     body = (
         "Novo agendamento na Danilo Barbearia:\n\n"
         f"Serviço: {booking.get('service_label')}\n"
@@ -469,22 +534,10 @@ def send_admin_booking_notification(booking):
         f"Cliente: {usuario.get('nome', '')}\n"
         f"Telefone: {usuario.get('numero', '')}\n"
     )
-    msg = MIMEText(body, 'plain', 'utf-8')
-    msg['Subject'] = f"Novo agendamento — {usuario.get('nome', 'cliente')} ({booking.get('time')})"
-    msg['From'] = smtp_from
-    msg['To'] = notify_email
 
-    try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-            server.starttls()
-            server.login(smtp_user, smtp_password)
-            server.sendmail(smtp_from, [notify_email], msg.as_string())
-        app.logger.info(f"E-mail de notificação enviado para {notify_email} (agendamento de {usuario.get('nome','')}).")
-    except Exception:
-        # Nunca deixar a notificação por e-mail derrubar o fluxo de agendamento —
-        # mas registra o erro real no log pra dar pra diagnosticar depois
-        # (ex.: provedor de hospedagem bloqueando conexões SMTP de saída).
-        app.logger.exception("Falha ao enviar e-mail de notificação de agendamento.")
+    if _send_email_via_resend(subject, body, notify_email):
+        return
+    _send_email_via_smtp(subject, body, notify_email)
 
 
 def hash_password(password: str) -> str:
