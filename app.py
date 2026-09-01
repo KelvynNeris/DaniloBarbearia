@@ -6,6 +6,7 @@ import re
 import secrets
 import smtplib
 import time
+import urllib.error
 import urllib.request
 import uuid
 from datetime import datetime, date, timedelta, timezone
@@ -466,6 +467,10 @@ def _send_email_via_resend(subject, body, to_email):
         headers={
             'Authorization': f'Bearer {api_key}',
             'Content-Type': 'application/json',
+            # Sem isso, o Cloudflare na frente da API da Resend bloqueia a
+            # requisição (error code 1010) por causa do User-Agent genérico
+            # que o urllib do Python manda por padrão.
+            'User-Agent': 'DaniloBarbearia/1.0',
         },
         method='POST',
     )
@@ -476,6 +481,15 @@ def _send_email_via_resend(subject, body, to_email):
                 return True
             app.logger.error(f"Resend retornou status {resp.status} ao tentar enviar notificação.")
             return False
+    except urllib.error.HTTPError as e:
+        # Inclui o corpo da resposta no log — é onde a Resend/Cloudflare
+        # explica o motivo real do erro (ex.: chave inválida, bloqueio, etc.).
+        try:
+            detail = e.read().decode('utf-8', errors='replace')
+        except Exception:
+            detail = '(sem corpo na resposta)'
+        app.logger.error(f"Falha ao enviar e-mail via Resend — HTTP {e.code}: {detail}")
+        return False
     except Exception:
         app.logger.exception("Falha ao enviar e-mail de notificação via Resend.")
         return False
