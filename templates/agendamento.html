@@ -4,29 +4,33 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Agendamento - Danilo Barbearia</title>
+  <script>(function(){try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
     <style>
       .agendamento-wrap{padding:2rem}
-      .user-card{background:rgba(255,255,255,0.02);padding:1rem;border-radius:10px;margin-bottom:1rem}
+      .user-card{background:var(--panel);border:1px solid var(--line);padding:1rem;border-radius:10px;margin-bottom:1rem;box-shadow:var(--shadow)}
       .service-list{display:grid;gap:0.6rem}
-      .service-item{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.08));padding:0.8rem;border-radius:8px}
+      .service-item{background:var(--surface);border:1px solid var(--line);padding:0.8rem;border-radius:8px}
     </style>
 </head>
 <body>
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/">Danilo<span>Barbearia</span></a>
-      <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
-        <span class="hamburger"></span>
-      </button>
+      <div class="header-controls">
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Alternar tema" title="Alternar tema">🌙</button>
+        <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
+          <span class="hamburger"></span>
+        </button>
+      </div>
       <nav class="site-nav" aria-label="Navegação principal">
         <button class="nav-close" aria-label="Fechar menu">&times;</button>
         <ul>
           <li><a href="/agendamento">Agendar</a></li>
-          <li><a href="#servicos">Serviços</a></li>
-          <li><a href="#galeria">Galeria</a></li>
-          <li><a href="#horario">Horário</a></li>
-          <li><a href="#contato">Contato</a></li>
+          <li><a href="/#servicos">Serviços</a></li>
+          <li><a href="/#galeria">Galeria</a></li>
+          <li><a href="/#horario">Horário</a></li>
+          <li><a href="/#contato">Contato</a></li>
           <li><a href="/meus_agendamentos">Meus Agendamentos</a></li>
           <li><a href="/admin/login">Login Admin</a></li>
         </ul>
@@ -81,7 +85,7 @@
           </div>
           <div style="margin-top:0.8rem">
             <label for="dateInput">Data</label>
-            <input type="date" id="dateInput" name="date" value="{{ today }}" min="{{ today }}" style="width:100%;padding:0.6rem;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text)">
+            <input type="date" id="dateInput" name="date" value="{{ today }}" min="{{ today }}" style="width:100%;padding:0.6rem;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text)">
           </div>
 
           <div style="margin-top:0.6rem">

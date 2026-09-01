@@ -3,29 +3,36 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Alterar dados do Administrador — Danilo Barbearia</title>
+  <title>Minha Conta — Danilo Barbearia</title>
+  <script>(function(){try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
   <style>
-    .auth-card{max-width:640px;margin:18px auto;padding:26px;border-radius:14px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12));box-shadow:0 14px 40px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03)}
-    .form-row{margin-bottom:12px}
-    label{display:block;margin-bottom:6px;color:var(--muted);font-weight:600}
-    input[type="text"],input[type="password"],input[type="tel"]{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);font-size:15px}
-    .readonly{padding:10px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.01),rgba(0,0,0,0.04));color:var(--text)}
-    .form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
-    .btn.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--text);padding:10px 12px;border-radius:10px}
-    .btn.primary{background:var(--accent);color:#071124;padding:10px 14px;border-radius:10px}
-    .hint{font-size:0.95rem;color:var(--muted)}
+    .auth-card{position:relative;max-width:620px;margin:28px auto;padding:2.25rem 2rem 2rem;border-radius:20px;background:var(--panel);box-shadow:var(--shadow);border:1px solid var(--line);overflow:hidden}
+    .auth-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg, var(--accent) 0%, var(--accent-strong) 100%)}
+    .auth-card h2{margin:0 0 0.35rem;text-align:center;font-size:1.4rem}
+    .auth-card > .hint{text-align:center;margin-bottom:1.75rem;display:block}
+    .form-row{margin-bottom:1.1rem}
+    label{display:block;margin-bottom:0.5rem;color:var(--muted);font-weight:600;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.07em}
+    input[type="text"],input[type="password"],input[type="tel"]{width:100%;padding:0.8rem 1rem;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:0.98rem;box-sizing:border-box;min-height:46px}
+    input[type="text"]:focus,input[type="password"]:focus,input[type="tel"]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--glow)}
+    .readonly{padding:0.8rem 1rem;border-radius:12px;background:var(--surface-2);color:var(--muted);min-height:46px;display:flex;align-items:center;box-sizing:border-box}
+    .form-actions{display:flex;justify-content:flex-end;gap:0.75rem;margin-top:1.75rem;padding-top:1.5rem;border-top:1px solid var(--line)}
+    .btn.secondary{background:transparent;border:1px solid var(--line);color:var(--text);padding:0.7rem 1rem;border-radius:10px}
+    .btn.primary{background:linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);color:#fff;padding:0.7rem 1.2rem;border-radius:10px;border:none;font-weight:700}
+    .form-row .hint{font-size:0.85rem;margin-top:0.4rem}
   </style>
 </head>
 <body>
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/">Danilo<span>Barbearia</span></a>
-      <nav class="site-nav">
-        <ul>
-          <li><a href="/admin/agendas">Agendas</a></li>
-          <li><a href="/">Voltar</a></li>
-        </ul>
+      <nav class="header-actions">
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Alternar tema" title="Alternar tema">🌙</button>
+        <a class="btn" href="/admin/agendas">Agendas</a>
+        <a class="btn" href="/admin/servicos">Serviços</a>
+        <a class="btn" href="/admin/horarios">Horários</a>
+        <a class="btn" href="/admin/galeria">Galeria</a>
+        <a class="btn" href="/">Voltar</a>
       </nav>
     </div>
   </header>
@@ -43,8 +50,13 @@
   <main>
     <section class="container">
       <div class="auth-card">
-        <h2>Atualize suas informações</h2>
-        <p class="hint">Por segurança defina uma nova senha e confirme seu telefone.</p>
+        <div class="icon-badge">👤</div>
+        <h2>Minha conta</h2>
+        {% if is_first_login %}
+          <span class="hint">Primeiro acesso: confirme seus dados e defina uma nova senha antes de continuar.</span>
+        {% else %}
+          <span class="hint">Atualize seus dados quando quiser. Deixe a senha em branco para mantê-la como está.</span>
+        {% endif %}
         <form method="post" action="/admin/change" id="adminChangeForm">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <div class="form-row">
@@ -53,47 +65,90 @@
           </div>
           <div class="form-row">
             <label for="name">Nome completo</label>
-            <input id="name" name="name" required maxlength="255" value="{{ admin.name }}">
+            <input id="name" name="name" maxlength="255" value="{{ admin.name or '' }}">
           </div>
           <div class="form-row">
             <label for="phone">Telefone</label>
-            <input id="phone" name="phone" type="tel" required maxlength="20" value="{{ admin.phone }}" placeholder="(xx) xxxxx-xxxx">
+            <input id="phone" name="phone" type="tel" maxlength="20" value="{{ admin.phone or '' }}" placeholder="(xx) xxxxx-xxxx">
             <div class="hint">Formato: (xx) xxxxx-xxxx</div>
           </div>
           <div class="form-row">
-            <label for="password">Nova senha</label>
-            <input id="password" name="password" type="password" required minlength="6" placeholder="Nova senha">
+            <label for="password">{{ 'Nova senha' if not is_first_login else 'Senha' }}</label>
+            <input id="password" name="password" type="password" {{ 'required' if is_first_login else '' }} minlength="6" placeholder="{{ 'Deixe em branco para não alterar' if not is_first_login else 'Defina sua senha' }}">
           </div>
           <div class="form-row">
-            <label for="password2">Confirme nova senha</label>
-            <input id="password2" name="password2" type="password" required minlength="6">
+            <label for="password2">Confirme a senha</label>
+            <input id="password2" name="password2" type="password" {{ 'required' if is_first_login else '' }} minlength="6">
           </div>
           <div class="form-actions">
-            <a class="btn secondary" href="/admin/agendas">Cancelar</a>
+            {% if not is_first_login %}
+              <a class="btn secondary" href="/admin/agendas">Cancelar</a>
+            {% endif %}
             <button type="submit" class="btn primary">Salvar alterações</button>
           </div>
         </form>
       </div>
+
+      {% if not is_first_login %}
+      <div class="auth-card" style="margin-top:18px">
+        <h2 style="font-size:1.1rem">🔑 Recuperação de senha</h2>
+        {% if has_recovery_code %}
+          <p class="hint">Você já tem um código de recuperação configurado. Gerar um novo substitui o anterior — ele deixará de funcionar.</p>
+        {% else %}
+          <p class="hint">Você ainda não tem um código de recuperação. Gere um agora e guarde em local seguro — é a única forma de redefinir sua senha caso a esqueça.</p>
+        {% endif %}
+        <form method="post" action="/admin/recovery-code/gerar" onsubmit="return confirm('{{ 'Isso vai invalidar seu código de recuperação atual. Continuar?' if has_recovery_code else 'Gerar um novo código de recuperação?' }}');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="form-actions" style="justify-content:flex-start">
+            <button type="submit" class="btn secondary">{{ '🔄 Gerar novo código' if has_recovery_code else '🔑 Gerar código de recuperação' }}</button>
+          </div>
+        </form>
+      </div>
+      {% endif %}
     </section>
   </main>
 
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   <script>
     (function(){
+      // Extrai apenas os dígitos "locais" de um telefone, ignorando o código
+      // do país (55) quando já vier no valor pré-preenchido pelo servidor.
+      function localDigits(v){
+        var d = (v || '').replace(/\D/g,'');
+        if(d.length > 11 && d.indexOf('55') === 0){ d = d.slice(2); }
+        return d.slice(0, 11);
+      }
+      function fmt(v){
+        var d = localDigits(v);
+        if(d.length<=2) return '('+d;
+        if(d.length<=6) return '('+d.slice(0,2)+') '+d.slice(2);
+        if(d.length<=10) return '('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6);
+        return '('+d.slice(0,2)+') '+d.slice(2,7)+'-'+d.slice(7);
+      }
       var tel = document.getElementById('phone');
-      function fmt(v){var d=v.replace(/\D/g,'').slice(0,11); if(d.length<=2) return '('+d; if(d.length<=6) return '('+d.slice(0,2)+') '+d.slice(2); if(d.length<=10) return '('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6); return '('+d.slice(0,2)+') '+d.slice(2,7)+'-'+d.slice(7);} 
-      if(tel){ tel.addEventListener('input', function(){ tel.value = fmt(tel.value); }); tel.addEventListener('blur', function(){ var d=(tel.value||'').replace(/\D/g,''); if(d.length!==11) tel.classList.add('invalid'); else tel.classList.remove('invalid'); }); }
+      if(tel && tel.value){ tel.value = fmt(tel.value); }
+      if(tel){
+        tel.addEventListener('input', function(){ tel.value = fmt(tel.value); });
+        tel.addEventListener('blur', function(){
+          var d = localDigits(tel.value);
+          if(d.length && d.length !== 11){ tel.classList.add('invalid'); } else { tel.classList.remove('invalid'); }
+        });
+      }
       var form = document.getElementById('adminChangeForm');
-      if(form){ form.addEventListener('submit', function(e){ var pwd=document.getElementById('password'), p2=document.getElementById('password2'); if(!pwd.value || pwd.value.length<6){ e.preventDefault(); alert('A nova senha é obrigatória (mínimo 6 caracteres).'); return; } if(pwd.value !== p2.value){ e.preventDefault(); alert('As senhas não coincidem.'); return; } var d=(tel.value||'').replace(/\D/g,''); if(d.length!==11){ e.preventDefault(); alert('Telefone inválido. Use o formato (xx) xxxxx-xxxx.'); return; }
-            // normalize phone to include country code before submit
-            try{
-              var norm = '';
-              if(d.length === 11){ norm = '+55' + d; }
-              else if(d.length > 11 && d.indexOf('55') === 0){ norm = '+' + d; }
-              else { norm = '+' + d; }
-              tel.value = norm;
-            }catch(err){ /* ignore */ }
-          }); }
+      if(form){
+        form.addEventListener('submit', function(e){
+          var pwd = document.getElementById('password'), p2 = document.getElementById('password2');
+          if(pwd.value || p2.value){
+            if(pwd.value.length < 6){ e.preventDefault(); alert('A nova senha deve ter pelo menos 6 caracteres.'); return; }
+            if(pwd.value !== p2.value){ e.preventDefault(); alert('As senhas não coincidem.'); return; }
+          }
+          if(tel && tel.value){
+            var d = localDigits(tel.value);
+            if(d.length !== 11){ e.preventDefault(); alert('Telefone inválido. Use o formato (xx) xxxxx-xxxx.'); return; }
+            tel.value = '+55' + d;
+          }
+        });
+      }
     })();
   </script>
 </body>

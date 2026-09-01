@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — Galeria</title>
+  <script>(function(){try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+  <style>
+    .upload-form{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .upload-form input[type="file"]{flex:1;min-width:220px;padding:0.6rem;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text)}
+    .admin-gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-top:18px}
+    .admin-gallery-item{position:relative;border-radius:10px;overflow:hidden;background:var(--surface-2);aspect-ratio:1/1}
+    .admin-gallery-item img{width:100%;height:100%;object-fit:cover;display:block}
+    .admin-gallery-item form{position:absolute;top:6px;right:6px;margin:0}
+    .admin-gallery-item .btn.danger{padding:0.3rem 0.55rem;font-size:0.85rem;border-radius:8px;background:rgba(17,24,39,0.55);border-color:transparent;color:#fff}
+    .admin-gallery-item .btn.danger:hover{background:rgba(220,38,38,0.85)}
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/">Danilo<span>Barbearia</span></a>
+      <div class="header-controls">
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Alternar tema" title="Alternar tema">🌙</button>
+        <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
+          <span class="hamburger"></span>
+        </button>
+      </div>
+      <nav class="site-nav" aria-label="Navegação principal">
+        <button class="nav-close" aria-label="Fechar menu">&times;</button>
+        <ul>
+          <li><a href="/admin/change" class="{{ 'active' if request.path == '/admin/change' else '' }}">Minha conta</a></li>
+          <li><a href="/admin/agendas" class="{{ 'active' if request.path == '/admin/agendas' else '' }}">Agendas</a></li>
+          <li><a href="/admin/relatorio" class="{{ 'active' if request.path == '/admin/relatorio' else '' }}">Relatório</a></li>
+          <li><a href="/admin/servicos" class="{{ 'active' if request.path == '/admin/servicos' else '' }}">Serviços</a></li>
+          <li><a href="/admin/horarios" class="{{ 'active' if request.path == '/admin/horarios' else '' }}">Horários</a></li>
+          <li><a href="/admin/galeria" class="{{ 'active' if request.path == '/admin/galeria' else '' }}">Galeria</a></li>
+          <li><a href="/">Voltar</a></li>
+          <li><form action="/admin/logout" method="post" style="margin:0;padding:0"><button type="submit" style="background:none;border:none;color:inherit;cursor:pointer;text-decoration:none;font-weight:600;padding:0.5rem 0;display:block">Sair</button></form></li>
+        </ul>
+      </nav>
+    </div>
+    <style>
+      .nav-toggle{background:transparent;border:0;padding:0.4rem;border-radius:8px;color:var(--text);display:inline-flex;align-items:center}
+      .nav-toggle:focus{outline:2px solid var(--accent)}
+      .hamburger{width:22px;height:2px;background:var(--text);display:block;position:relative}
+      .hamburger::before,.hamburger::after{content:'';position:absolute;left:0;width:22px;height:2px;background:var(--text);}
+      .hamburger::before{top:-6px}.hamburger::after{top:6px}
+      .hamburger, .hamburger::before, .hamburger::after { transition: transform .2s ease, top .18s ease, opacity .18s ease, background .18s ease; transform-origin: center; }
+      .nav-toggle[aria-expanded="true"] .hamburger{ background: transparent; }
+      .nav-toggle[aria-expanded="true"] .hamburger::before{ top:0; transform: rotate(45deg); }
+      .nav-toggle[aria-expanded="true"] .hamburger::after{ top:0; transform: rotate(-45deg); }
+      .site-nav{position:fixed;right:0;top:0;height:100vh;width:70%;max-width:320px;background:var(--drawer-bg);backdrop-filter:blur(16px);border-left:1px solid var(--line);box-shadow:-12px 0 30px rgba(17,24,39,0.10);transform:translateX(100%);transition:transform .28s ease,opacity .2s;opacity:0;padding:3.5rem 1rem}
+      .site-nav.open{transform:translateX(0);opacity:1}
+      .site-nav ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0.75rem}
+      .site-nav a{color:var(--text);text-decoration:none;font-weight:600;padding:0.5rem 0;display:block}
+      .site-nav .nav-close{position:absolute;right:1rem;top:0.8rem;background:transparent;border:0;color:var(--text);font-size:1.5rem;padding:0.25rem;cursor:pointer}
+      .site-nav .nav-close:focus{outline:2px solid rgba(17,24,39,0.12)}
+    </style>
+  </header>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="container flash-messages">
+        {% for msg in messages %}<div class="flash">{{ msg }}</div>{% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <main class="container">
+    <div class="report-card">
+      <div class="report-head">
+        <div>
+          <h2>Galeria de fotos</h2>
+          <div class="hint">As fotos enviadas aqui aparecem na seção "Galeria" da página inicial. Formatos aceitos: JPG, PNG, WEBP (até 8MB).</div>
+        </div>
+      </div>
+
+      <form class="upload-form" action="/admin/galeria/upload" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="file" name="photo" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required>
+        <button type="submit" class="btn primary">📤 Enviar foto</button>
+      </form>
+
+      {% if images and images|length > 0 %}
+      <div class="admin-gallery-grid">
+        {% for img in images %}
+        <div class="admin-gallery-item">
+          <img src="{{ url_for('static', filename='uploads/gallery/' + img.filename) }}" alt="Foto da galeria">
+          <form action="/admin/galeria/excluir" method="post" onsubmit="return confirm('Remover esta foto da galeria?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="image_id" value="{{ img.id }}">
+            <button type="submit" class="btn danger" title="Remover">🗑️</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+        <p style="margin-top:18px">Nenhuma foto enviada ainda — a página inicial vai mostrar quadros vazios até você adicionar a primeira.</p>
+      {% endif %}
+    </div>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Recuperar Senha — Danilo Barbearia</title>
+  <script>(function(){try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+  <style>
+    body { display: flex; flex-direction: column; min-height: 100vh; }
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+    .auth-container { width: 100%; max-width: 420px; }
+    .auth-card { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 2.75rem 2.25rem 2.25rem; box-shadow: var(--shadow); overflow: hidden; }
+    .auth-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent) 0%, var(--accent-strong) 100%); }
+    .auth-card h1 { font-size: 1.45rem; margin: 0 0 0.4rem; text-align: center; }
+    .auth-card .subtitle { text-align: center; color: var(--muted); font-size: 0.92rem; margin-bottom: 2rem; display: block; }
+    .form-group { margin-bottom: 1.3rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    .form-group input { width: 100%; padding: 0.8rem 1rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); font-size: 1rem; box-sizing: border-box; min-height: 46px; }
+    .form-group input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--glow); }
+    .form-actions { display: flex; gap: 0.85rem; margin-top: 1.75rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
+    .form-actions .btn { flex: 1; min-height: 46px; }
+    .hint-box { margin-bottom: 1.5rem; padding: 0.85rem 1rem; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/">Danilo<span>Barbearia</span></a>
+      <nav class="header-actions">
+        <a class="btn" href="/admin/login">← Voltar</a>
+      </nav>
+    </div>
+  </header>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="container flash-messages">
+        {% for msg in messages %}<div class="flash">{{ msg }}</div>{% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <main>
+    <div class="auth-container">
+      <div class="auth-card">
+        <div class="icon-badge">🔑</div>
+        <h1>Recuperar senha</h1>
+        <span class="subtitle">Informe o código de recuperação gerado em "Minha conta"</span>
+
+        <div class="hint-box">
+          Não tem um código? Ele só existe se você já o gerou antes, enquanto ainda tinha acesso à conta. Sem ele, não é possível recuperar a senha por aqui.
+        </div>
+
+        <form method="post" action="/admin/recuperar" id="recoverForm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+          <div class="form-group">
+            <label for="username">Usuário</label>
+            <input id="username" name="username" type="text" required maxlength="150" placeholder="Digite seu usuário" autofocus>
+          </div>
+
+          <div class="form-group">
+            <label for="code">Código de recuperação</label>
+            <input id="code" name="code" type="text" required placeholder="XXXX-XXXX-XXXX-XXXX">
+          </div>
+
+          <div class="form-group">
+            <label for="password">Nova senha</label>
+            <input id="password" name="password" type="password" required minlength="6" placeholder="Mínimo 6 caracteres">
+          </div>
+
+          <div class="form-group">
+            <label for="password2">Confirme a nova senha</label>
+            <input id="password2" name="password2" type="password" required minlength="6">
+          </div>
+
+          <div class="form-actions">
+            <a class="btn" href="/admin/login">Cancelar</a>
+            <button type="submit" class="btn primary">Redefinir senha</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

@@ -4,23 +4,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Confirmação - Danilo Barbearia</title>
+  <script>(function(){try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
 </head>
 <body>
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/">Danilo<span>Barbearia</span></a>
-      <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
-        <span class="hamburger"></span>
-      </button>
+      <div class="header-controls">
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Alternar tema" title="Alternar tema">🌙</button>
+        <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
+          <span class="hamburger"></span>
+        </button>
+      </div>
       <nav class="site-nav" aria-label="Navegação principal">
         <button class="nav-close" aria-label="Fechar menu">&times;</button>
         <ul>
           <li><a href="/agendamento">Agendar</a></li>
-          <li><a href="#servicos">Serviços</a></li>
-          <li><a href="#galeria">Galeria</a></li>
-          <li><a href="#horario">Horário</a></li>
-          <li><a href="#contato">Contato</a></li>
+          <li><a href="/#servicos">Serviços</a></li>
+          <li><a href="/#galeria">Galeria</a></li>
+          <li><a href="/#horario">Horário</a></li>
+          <li><a href="/#contato">Contato</a></li>
           <li><a href="/meus_agendamentos">Meus Agendamentos</a></li>
           <li><a href="/admin/login">Login Admin</a></li>
         </ul>
@@ -69,6 +73,18 @@
           <div class="detail-row"><span class="label">Nome</span><span class="value">{{ booking.usuario.nome }}</span></div>
           <div class="detail-row"><span class="label">Telefone</span><span class="value">{{ booking.usuario.numero }}</span></div>
         </div>
+
+        {% if whatsapp_link %}
+        <div class="whatsapp-callout">
+          <div class="whatsapp-callout-icon">📲</div>
+          <div class="whatsapp-callout-body">
+            <strong>Avise o barbeiro pelo WhatsApp</strong>
+            <p class="muted">Já deixamos a mensagem pronta — é só clicar em enviar.</p>
+          </div>
+          <a class="btn whatsapp" id="whatsappBtn" href="{{ whatsapp_link }}" target="_blank" rel="noopener">💬 Abrir WhatsApp</a>
+        </div>
+        {% endif %}
+
         <div class="confirm-actions">
           <a class="btn" href="/agendamento">Agendar outro</a>
           <a class="btn primary" href="/meus_agendamentos">Meus Agendamentos</a>
@@ -83,5 +99,17 @@
   </footer>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   <script>document.getElementById('ano').textContent = new Date().getFullYear();</script>
+  {% if whatsapp_link %}
+  <script>
+    // Tenta abrir o WhatsApp automaticamente assim que a confirmação carrega.
+    // Navegadores podem bloquear a abertura automática de pop-ups; o botão
+    // "Abrir WhatsApp" acima sempre funciona como alternativa garantida.
+    (function(){
+      try {
+        window.open("{{ whatsapp_link }}", "_blank", "noopener");
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>

@@ -1,57 +1,313 @@
 import hashlib
+import hmac
 import os
+import re
+import secrets
+import smtplib
+import time
 import uuid
 from datetime import datetime, date, timedelta, timezone
+from email.mime.text import MIMEText
+from urllib.parse import quote
 
+import mysql.connector
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, session, flash, jsonify
 from werkzeug.security import check_password_hash
+from werkzeug.utils import secure_filename
 
 from conexao import Conexao
 
 load_dotenv()
 
-# Serviços disponíveis (chave -> rótulo, preço e imagem)
-SERVICES = {
-    'corte_social_barba': {'label': 'Corte social com barba', 'price': 50, 'image': 'images/corte_social_barba.svg'},
-    'corte_degrade_barba': {'label': 'Corte degradê com barba', 'price': 52, 'image': 'images/corte_degrade_barba.svg'},
-    'corte_degrade': {'label': 'Corte degradê', 'price': 32, 'image': 'images/corte_degrade.svg'},
-    'corte_social': {'label': 'Corte social', 'price': 27, 'image': 'images/corte_social.svg'},
-    'corte_maquina': {'label': 'Corte máquina', 'price': 22, 'image': 'images/corte_maquina.svg'},
-    'corte_navalhado': {'label': 'Corte navalhado', 'price': 32, 'image': 'images/corte_navalhado.svg'},
-    'barba': {'label': 'Barba', 'price': 27, 'image': 'images/barba.svg'},
-    'pezinho': {'label': 'Pezinho do cabelo', 'price': 17, 'image': 'images/pezinho.svg'},
-    'sobrancelha': {'label': 'Sobrancelha', 'price': 10, 'image': 'images/sobrancelha.svg'},
-    'corte_tesoura': {'label': 'Corte só Tesoura', 'price': 32, 'image': 'images/corte_tesoura.svg'},
+# Serviços padrão — usados apenas para popular a tabela `services` na primeira
+# execução. Depois disso, os serviços de verdade vêm do banco e são
+# gerenciáveis em /admin/servicos.
+DEFAULT_SERVICES = [
+    {'key': 'corte_social_barba', 'label': 'Corte social com barba', 'description': 'Acabamento social + barba modelada.', 'price': 50, 'image': 'images/corte_social_barba.svg'},
+    {'key': 'corte_degrade_barba', 'label': 'Corte degradê com barba', 'description': 'Degradê personalizado + barba.', 'price': 52, 'image': 'images/corte_degrade_barba.svg'},
+    {'key': 'corte_degrade', 'label': 'Corte degradê', 'description': 'Degradê limpo e bem marcado.', 'price': 32, 'image': 'images/corte_degrade.svg'},
+    {'key': 'corte_social', 'label': 'Corte social', 'description': 'Corte social tradicional com finalização.', 'price': 27, 'image': 'images/corte_social.svg'},
+    {'key': 'corte_maquina', 'label': 'Corte máquina', 'description': 'Corte rápido e preciso com máquina.', 'price': 22, 'image': 'images/corte_maquina.svg'},
+    {'key': 'corte_navalhado', 'label': 'Corte navalhado', 'description': 'Acabamento com navalha para linhas definidas.', 'price': 32, 'image': 'images/corte_navalhado.svg'},
+    {'key': 'barba', 'label': 'Barba', 'description': 'Modelagem, hidratação e finalização.', 'price': 27, 'image': 'images/barba.svg'},
+    {'key': 'pezinho', 'label': 'Pezinho do cabelo', 'description': 'Ajuste nas laterais e nuca.', 'price': 17, 'image': 'images/pezinho.svg'},
+    {'key': 'sobrancelha', 'label': 'Sobrancelha', 'description': 'Design e limpeza de sobrancelhas.', 'price': 10, 'image': 'images/sobrancelha.svg'},
+    {'key': 'corte_tesoura', 'label': 'Corte só Tesoura', 'description': 'Corte apenas com tesoura para acabamento mais natural.', 'price': 32, 'image': 'images/corte_tesoura.svg'},
+]
+
+# Horário padrão — reproduz exatamente as regras que antes eram fixas no
+# código. weekday: 0=segunda ... 6=domingo (padrão de date.weekday()).
+DEFAULT_BUSINESS_HOURS = {
+    0: {'is_closed': False, 'open': '08:00', 'close': '18:40', 'break_start': '11:00', 'break_end': '13:00'},
+    1: {'is_closed': False, 'open': '08:00', 'close': '18:40', 'break_start': '11:00', 'break_end': '13:00'},
+    2: {'is_closed': False, 'open': '08:00', 'close': '18:40', 'break_start': '11:00', 'break_end': '13:00'},
+    3: {'is_closed': False, 'open': '08:00', 'close': '18:40', 'break_start': '11:00', 'break_end': '13:00'},
+    4: {'is_closed': False, 'open': '08:00', 'close': '18:40', 'break_start': '11:00', 'break_end': '13:00'},
+    5: {'is_closed': False, 'open': '08:00', 'close': '18:40', 'break_start': '11:00', 'break_end': '13:00'},
+    6: {'is_closed': False, 'open': '09:00', 'close': '11:20', 'break_start': None, 'break_end': None},
 }
+SLOT_MINUTES = 20
+WEEKDAY_LABELS_PT = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-me-in-dev")
 app.secret_key = app.config["SECRET_KEY"]
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8MB por upload (fotos da galeria)
+
+GALLERY_UPLOAD_DIR = os.path.join(app.root_path, 'static', 'uploads', 'gallery')
+GALLERY_ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+
+# ---- Limitador simples de tentativas de login do admin (em memória) ----
+# Protege contra força bruta sem precisar de infraestrutura extra (Redis etc).
+# Funciona por processo: em produção com múltiplos workers cada um tem seu
+# próprio contador, mas para o volume desta aplicação isso já é suficiente.
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 5 * 60
+LOGIN_LOCKOUT_SECONDS = 5 * 60
+_login_attempts = {}
+
+
+def _login_rate_key(username):
+    ip = request.remote_addr or 'unknown'
+    return f"{ip}:{(username or '').strip().lower()}"
+
+
+def check_login_locked(key):
+    """Retorna (bloqueado, segundos_restantes)."""
+    info = _login_attempts.get(key)
+    if not info:
+        return False, 0
+    locked_until = info.get('locked_until')
+    if locked_until and time.time() < locked_until:
+        return True, int(locked_until - time.time()) + 1
+    return False, 0
+
+
+def register_login_failure(key):
+    now = time.time()
+    info = _login_attempts.get(key)
+    if not info or (now - info.get('first_attempt', now)) > LOGIN_WINDOW_SECONDS:
+        info = {'count': 0, 'first_attempt': now, 'locked_until': None}
+    info['count'] += 1
+    if info['count'] >= LOGIN_MAX_ATTEMPTS:
+        info['locked_until'] = now + LOGIN_LOCKOUT_SECONDS
+    _login_attempts[key] = info
+
+
+def clear_login_attempts(key):
+    _login_attempts.pop(key, None)
+
+
+# ---- Serviços e horário de funcionamento (gerenciáveis em /admin) ----
+
+def ensure_services_table(conn=None):
+    """Cria a tabela `services` se não existir e a popula com os serviços
+    padrão na primeira vez (preservando o comportamento original)."""
+    close_conn = False
+    if conn is None:
+        conn = Conexao.conectar()
+        close_conn = True
+    try:
+        cur = conn.cursor()
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS services (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                `key` VARCHAR(64) UNIQUE NOT NULL,
+                label VARCHAR(255) NOT NULL,
+                description VARCHAR(500) NULL,
+                price INT NOT NULL,
+                image VARCHAR(255) NULL,
+                active TINYINT(1) NOT NULL DEFAULT 1,
+                sort_order INT NOT NULL DEFAULT 0
+            )
+        ''')
+        conn.commit()
+        cur.execute('SELECT COUNT(*) FROM services')
+        (count,) = cur.fetchone()
+        if count == 0:
+            for i, svc in enumerate(DEFAULT_SERVICES):
+                cur.execute(
+                    'INSERT INTO services (`key`, label, description, price, image, active, sort_order) VALUES (%s,%s,%s,%s,%s,1,%s)',
+                    (svc['key'], svc['label'], svc['description'], svc['price'], svc['image'], i)
+                )
+            conn.commit()
+        cur.close()
+    finally:
+        if close_conn:
+            conn.close()
+
+
+def load_services(active_only=True):
+    """Retorna os serviços do banco como {key: {label, description, price, image}},
+    na ordem de exibição. Cria/popula a tabela automaticamente se necessário."""
+    try:
+        conn = Conexao.conectar()
+        ensure_services_table(conn)
+        cur = conn.cursor(dictionary=True)
+        if active_only:
+            cur.execute('SELECT `key`, label, description, price, image, active FROM services WHERE active = 1 ORDER BY sort_order, id')
+        else:
+            cur.execute('SELECT `key`, label, description, price, image, active FROM services ORDER BY sort_order, id')
+        rows = cur.fetchall()
+        cur.close(); conn.close()
+    except Exception:
+        # Banco indisponível: cai para os serviços padrão em memória, para o
+        # site continuar funcionando mesmo com o banco fora do ar.
+        rows = [dict(svc, active=1) for svc in DEFAULT_SERVICES]
+
+    services = {}
+    for r in rows:
+        services[r['key']] = {
+            'label': r['label'],
+            'description': r.get('description') or '',
+            'price': r['price'],
+            'image': r.get('image') or '',
+            'active': bool(r.get('active', 1)),
+        }
+    return services
+
+
+def ensure_business_hours_table(conn=None):
+    """Cria a tabela `business_hours` se não existir e a popula com o
+    horário padrão (equivalente ao que antes era fixo no código)."""
+    close_conn = False
+    if conn is None:
+        conn = Conexao.conectar()
+        close_conn = True
+    try:
+        cur = conn.cursor()
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS business_hours (
+                weekday TINYINT PRIMARY KEY,
+                is_closed TINYINT(1) NOT NULL DEFAULT 0,
+                open_time TIME NULL,
+                close_time TIME NULL,
+                break_start TIME NULL,
+                break_end TIME NULL
+            )
+        ''')
+        conn.commit()
+        cur.execute('SELECT COUNT(*) FROM business_hours')
+        (count,) = cur.fetchone()
+        if count == 0:
+            for weekday, h in DEFAULT_BUSINESS_HOURS.items():
+                cur.execute(
+                    'INSERT INTO business_hours (weekday, is_closed, open_time, close_time, break_start, break_end) VALUES (%s,%s,%s,%s,%s,%s)',
+                    (weekday, int(h['is_closed']), h['open'], h['close'], h['break_start'], h['break_end'])
+                )
+            conn.commit()
+        cur.close()
+    finally:
+        if close_conn:
+            conn.close()
+
+
+def load_business_hours():
+    """Retorna o horário de funcionamento como {weekday: {is_closed, open, close, break_start, break_end}}
+    (valores de horário já normalizados para 'HH:MM' ou None)."""
+    try:
+        conn = Conexao.conectar()
+        ensure_business_hours_table(conn)
+        cur = conn.cursor(dictionary=True)
+        cur.execute('SELECT weekday, is_closed, open_time, close_time, break_start, break_end FROM business_hours ORDER BY weekday')
+        rows = cur.fetchall()
+        cur.close(); conn.close()
+    except Exception:
+        rows = [dict(weekday=w, **h) for w, h in DEFAULT_BUSINESS_HOURS.items()]
+        for r in rows:
+            r['is_closed'] = r.pop('is_closed')
+            r['open_time'] = r.pop('open')
+            r['close_time'] = r.pop('close')
+
+    hours = {}
+    for r in rows:
+        hours[int(r['weekday'])] = {
+            'is_closed': bool(r.get('is_closed')),
+            'open': format_time_value(r.get('open_time')) or None,
+            'close': format_time_value(r.get('close_time')) or None,
+            'break_start': format_time_value(r.get('break_start')) or None,
+            'break_end': format_time_value(r.get('break_end')) or None,
+        }
+    return hours
+
+
+def _hhmm_to_minutes(hhmm):
+    if not hhmm:
+        return None
+    parts = str(hhmm).split(':')
+    return int(parts[0]) * 60 + int(parts[1])
+
+
+def _minutes_to_hhmm(total_minutes):
+    return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+
+def generate_slots_from_hours(open_hhmm, close_hhmm, break_start_hhmm, break_end_hhmm, slot_minutes=SLOT_MINUTES):
+    """Gera os horários 'HH:MM' disponíveis entre open e close (inclusive),
+    pulando o intervalo [break_start, break_end) quando informado."""
+    start = _hhmm_to_minutes(open_hhmm)
+    end = _hhmm_to_minutes(close_hhmm)
+    if start is None or end is None:
+        return []
+    bstart = _hhmm_to_minutes(break_start_hhmm)
+    bend = _hhmm_to_minutes(break_end_hhmm)
+    slots = []
+    m = start
+    while m <= end:
+        if bstart is None or bend is None or not (bstart <= m < bend):
+            slots.append(_minutes_to_hhmm(m))
+        m += slot_minutes
+    return slots
 
 
 def generate_allowed_slots_for_date_obj(d):
-    """Return list of allowed 'HH:MM' slots for a date object d.
-    Rules: Sunday 09:00-11:20 (20m). Other days 08:00-18:40 excluding 11:00-12:59.
-    If d is today, caller should filter past slots using current time if desired.
+    """Retorna os horários 'HH:MM' permitidos para a data d, de acordo com o
+    horário de funcionamento configurado em /admin/horarios.
+    Se d for hoje, quem chamar deve filtrar os horários já passados.
     """
-    slots = []
-    is_sunday = (d.weekday() == 6)
-    if is_sunday:
-        for h in range(9, 12):
-            for m in (0, 20, 40):
-                if h == 11 and m > 20:
-                    continue
-                slots.append(f"{h:02d}:{m:02d}")
-    else:
-        for h in range(8, 19):
-            for m in (0, 20, 40):
-                if h >= 11 and h < 13:
-                    continue
-                if h == 18 and m > 40:
-                    continue
-                slots.append(f"{h:02d}:{m:02d}")
-    return slots
+    hours = load_business_hours()
+    day = hours.get(d.weekday())
+    if not day or day.get('is_closed'):
+        return []
+    return generate_slots_from_hours(day.get('open'), day.get('close'), day.get('break_start'), day.get('break_end'))
+
+
+# ---- Galeria de fotos (gerenciável em /admin/galeria) ----
+
+def ensure_gallery_table(conn=None):
+    close_conn = False
+    if conn is None:
+        conn = Conexao.conectar()
+        close_conn = True
+    try:
+        cur = conn.cursor()
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS gallery_images (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                filename VARCHAR(255) NOT NULL,
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                sort_order INT NOT NULL DEFAULT 0
+            )
+        ''')
+        conn.commit()
+        cur.close()
+    finally:
+        if close_conn:
+            conn.close()
+
+
+def load_gallery_images():
+    try:
+        conn = Conexao.conectar()
+        ensure_gallery_table(conn)
+        cur = conn.cursor(dictionary=True)
+        cur.execute('SELECT id, filename FROM gallery_images ORDER BY sort_order, id')
+        rows = cur.fetchall()
+        cur.close(); conn.close()
+        return rows
+    except Exception:
+        return []
 
 
 def normalize_phone(raw):
@@ -102,6 +358,132 @@ def normalize_name(raw):
     return ' '.join(normalized_parts)
 
 
+def format_date_value(d):
+    """Normaliza um valor de data vindo do banco (date/str/None) para 'YYYY-MM-DD'."""
+    if d is None:
+        return ''
+    try:
+        return d.isoformat()
+    except Exception:
+        return str(d)[:10]
+
+
+def format_time_value(t):
+    """Normaliza um valor de hora vindo do banco (time/timedelta/str/None) para 'HH:MM'."""
+    if t is None:
+        return ''
+    try:
+        return t.strftime('%H:%M')
+    except Exception:
+        pass
+    try:
+        total_seconds = int(t.total_seconds())
+        h, rem = divmod(total_seconds, 3600)
+        m, _ = divmod(rem, 60)
+        return f"{h:02d}:{m:02d}"
+    except Exception:
+        return str(t)[:5]
+
+
+def format_date_br(date_str):
+    """Converte 'YYYY-MM-DD' para 'DD/MM/YYYY' (uso em mensagens ao cliente)."""
+    try:
+        return datetime.strptime(str(date_str), '%Y-%m-%d').strftime('%d/%m/%Y')
+    except Exception:
+        return str(date_str) if date_str else ''
+
+
+def get_barber_whatsapp_number():
+    """Retorna o telefone (só dígitos, com DDI) do barbeiro cadastrado como admin,
+    para uso em links wa.me. Retorna None se não houver telefone configurado."""
+    try:
+        conn = Conexao.conectar()
+        cur = conn.cursor(dictionary=True)
+        cur.execute('SELECT phone FROM admins ORDER BY id ASC LIMIT 1')
+        row = cur.fetchone()
+        cur.close(); conn.close()
+    except Exception:
+        return None
+    phone = row.get('phone') if row else None
+    if not phone:
+        return None
+    digits = ''.join(ch for ch in str(phone) if ch.isdigit())
+    return digits or None
+
+
+def format_phone_display(phone):
+    """Formata um telefone armazenado ('+55DDDNUMERO' ou similar) para exibição
+    amigável '(DD) NNNNN-NNNN'."""
+    if not phone:
+        return ''
+    digits = ''.join(ch for ch in str(phone) if ch.isdigit())
+    if digits.startswith('55') and len(digits) > 11:
+        digits = digits[2:]
+    if len(digits) == 11:
+        return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
+    if len(digits) == 10:
+        return f"({digits[:2]}) {digits[2:6]}-{digits[6:]}"
+    return phone
+
+
+def build_whatsapp_confirmation_link(booking):
+    """Monta um link wa.me para o cliente avisar o barbeiro do agendamento,
+    já com a mensagem pronta — o cliente só precisa clicar em enviar."""
+    barber_phone = get_barber_whatsapp_number()
+    if not barber_phone or not booking:
+        return None
+    usuario = booking.get('usuario') or {}
+    msg = (
+        "Olá! Acabei de agendar um horário na Danilo Barbearia:\n"
+        f"💈 Serviço: {booking.get('service_label')}\n"
+        f"📅 Data: {format_date_br(booking.get('date'))}\n"
+        f"⏰ Horário: {booking.get('time')}\n"
+        f"🙋 Nome: {usuario.get('nome', '')}"
+    )
+    return f"https://wa.me/{barber_phone}?text={quote(msg)}"
+
+
+def send_admin_booking_notification(booking):
+    """Envia um e-mail para o admin avisando de um novo agendamento — não
+    depende do cliente fazer nada. Configurável via variáveis de ambiente
+    (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, ADMIN_NOTIFY_EMAIL).
+    Se não estiver configurado, simplesmente não faz nada (o agendamento
+    continua funcionando normalmente sem essa notificação).
+    """
+    smtp_host = os.getenv('SMTP_HOST')
+    smtp_user = os.getenv('SMTP_USER')
+    smtp_password = os.getenv('SMTP_PASSWORD')
+    notify_email = os.getenv('ADMIN_NOTIFY_EMAIL') or smtp_user
+    if not smtp_host or not smtp_user or not smtp_password or not notify_email:
+        return  # notificação por e-mail não configurada — segue sem erro
+
+    smtp_port = int(os.getenv('SMTP_PORT', '587'))
+    smtp_from = os.getenv('SMTP_FROM') or smtp_user
+    usuario = (booking or {}).get('usuario') or {}
+
+    body = (
+        "Novo agendamento na Danilo Barbearia:\n\n"
+        f"Serviço: {booking.get('service_label')}\n"
+        f"Data: {format_date_br(booking.get('date'))}\n"
+        f"Horário: {booking.get('time')}\n"
+        f"Cliente: {usuario.get('nome', '')}\n"
+        f"Telefone: {usuario.get('numero', '')}\n"
+    )
+    msg = MIMEText(body, 'plain', 'utf-8')
+    msg['Subject'] = f"Novo agendamento — {usuario.get('nome', 'cliente')} ({booking.get('time')})"
+    msg['From'] = smtp_from
+    msg['To'] = notify_email
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=8) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_from, [notify_email], msg.as_string())
+    except Exception:
+        # Nunca deixar a notificação por e-mail derrubar o fluxo de agendamento.
+        pass
+
+
 def hash_password(password: str) -> str:
     """Return the SHA-256 hex digest of the password."""
     if password is None:
@@ -121,6 +503,43 @@ def verify_password(stored_hash: str, password: str) -> bool:
         except Exception:
             return False
     return hash_password(password) == stored_hash
+
+
+def generate_recovery_code():
+    """Gera um código de recuperação legível, ex: 'AB3D-9KLM-2QRT-7XYZ'.
+    Evita caracteres ambíguos (0/O, 1/I/L)."""
+    alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    raw = ''.join(secrets.choice(alphabet) for _ in range(16))
+    return '-'.join(raw[i:i + 4] for i in range(0, 16, 4))
+
+
+def hash_recovery_code(code):
+    normalized = (code or '').strip().upper().replace(' ', '')
+    return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+
+
+def ensure_recovery_code_column(conn=None):
+    """Cria a coluna recovery_code_hash na tabela admins se ainda não existir."""
+    close_conn = False
+    if conn is None:
+        conn = Conexao.conectar()
+        close_conn = True
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute('SHOW COLUMNS FROM admins')
+            columns = [str(col[0]).lower() for col in cur.fetchall()]
+            if 'recovery_code_hash' not in columns:
+                try:
+                    cur.execute('ALTER TABLE admins ADD COLUMN recovery_code_hash VARCHAR(255) NULL')
+                    conn.commit()
+                except Exception:
+                    pass
+        finally:
+            cur.close()
+    finally:
+        if close_conn:
+            conn.close()
 
 
 def ensure_first_login_column(conn=None):
@@ -150,13 +569,64 @@ def ensure_first_login_column(conn=None):
             conn.close()
 
 
+def ensure_admin_schema(conn):
+    """Garante as colunas opcionais da tabela admins (first_login, recovery_code_hash)."""
+    ensure_first_login_column(conn)
+    ensure_recovery_code_column(conn)
+
+
+def fetch_admin(conn, username=None, admin_id=None):
+    """Fetch an admin row by username or id, tolerating admins tables that
+    don't have the 'first_login' column yet (older/legacy schema).
+
+    Always uses a fresh cursor for the fallback query so a failed SELECT
+    never leaves a stale/aborted cursor around for the next statement.
+    """
+    if username is None and admin_id is None:
+        return None
+    where_col = 'username' if username is not None else 'id'
+    where_val = username if username is not None else admin_id
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            f'SELECT id, username, name, phone, password_hash, first_login, recovery_code_hash FROM admins WHERE {where_col} = %s LIMIT 1',
+            (where_val,)
+        )
+        row = cur.fetchone()
+    except Exception:
+        cur.close()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            f'SELECT id, username, name, phone, password_hash FROM admins WHERE {where_col} = %s LIMIT 1',
+            (where_val,)
+        )
+        row = cur.fetchone()
+        if row is not None:
+            row['first_login'] = 0
+            row['recovery_code_hash'] = None
+    finally:
+        cur.close()
+    return row
+
+
 @app.route("/")
 def inicio():
     # Garante CSRF token na sessão e passa para o template
     if 'csrf_token' not in session:
         session['csrf_token'] = str(uuid.uuid4())
     usuario = session.get('usuario')
-    return render_template("index.html", csrf_token=session.get('csrf_token'), usuario=usuario)
+    barber_phone_digits = get_barber_whatsapp_number()
+    barber_phone_display = format_phone_display(barber_phone_digits) if barber_phone_digits else None
+    return render_template(
+        "index.html",
+        csrf_token=session.get('csrf_token'),
+        usuario=usuario,
+        barber_phone_digits=barber_phone_digits,
+        barber_phone_display=barber_phone_display,
+        services=load_services(active_only=True),
+        gallery_images=load_gallery_images(),
+    )
 
 
 @app.route('/admin/login', methods=['GET','POST'])
@@ -176,44 +646,32 @@ def admin_login():
 
     username = (request.form.get('username') or '').strip()
     password = request.form.get('password') or ''
-    phone_raw = request.form.get('phone') or ''
-    if not username or not password or not phone_raw.strip():
-        flash('Preencha usuário, telefone e senha.')
+    if not username or not password:
+        flash('Preencha usuário e senha.')
         return redirect('/admin/login')
-    phone = normalize_phone(phone_raw)
+
+    rate_key = _login_rate_key(username)
+    locked, seconds_left = check_login_locked(rate_key)
+    if locked:
+        minutes = max(1, seconds_left // 60)
+        flash(f'Muitas tentativas de login. Tente novamente em {minutes} minuto(s).')
+        return redirect('/admin/login')
 
     try:
         conn = Conexao.conectar()
-        ensure_first_login_column(conn)
-        cur = conn.cursor(dictionary=True)
-        try:
-            cur.execute('SELECT id, username, name, phone, password_hash, first_login FROM admins WHERE username = %s LIMIT 1', (username,))
-        except Exception:
-            cur.execute('SELECT id, username, name, phone, password_hash FROM admins WHERE username = %s LIMIT 1', (username,))
-            row = cur.fetchone()
-            if row is not None:
-                row['first_login'] = 0
-            else:
-                row = None
-        else:
-            row = cur.fetchone()
-        cur.close(); conn.close()
+        ensure_admin_schema(conn)
+        row = fetch_admin(conn, username=username)
+        conn.close()
         if not row:
+            register_login_failure(rate_key)
             flash('Usuário/senha inválidos.')
             return redirect('/admin/login')
-        if not verify_password(row.get('password_hash',''), password):
+        if not verify_password(row.get('password_hash', ''), password):
+            register_login_failure(rate_key)
             flash('Usuário/senha inválidos.')
             return redirect('/admin/login')
-        # validate phone matches stored admin phone
-        stored_phone = row.get('phone') or ''
-        # normalize stored phone before comparing so formats like '+55 (11) 91234-5678' match
-        try:
-            stored_phone_norm = normalize_phone(stored_phone) if (stored_phone and str(stored_phone).strip()) else ''
-        except Exception:
-            stored_phone_norm = stored_phone
-        if phone != stored_phone_norm:
-            flash('Telefone inválido para este usuário.')
-            return redirect('/admin/login')
+
+        clear_login_attempts(rate_key)
 
         # login successful: store admin id in session
         session['admin_id'] = row.get('id')
@@ -236,26 +694,18 @@ def admin_login():
 
 @app.route('/admin/change', methods=['GET','POST'])
 def admin_change():
-    # allow logged-in admin to change name, phone and password
+    # Página "Minha conta": permite ao admin logado atualizar nome, telefone e senha
+    # sempre que quiser — deixou de ser bloqueada após o primeiro acesso.
     admin_id = session.get('admin_id')
     if not admin_id:
         flash('Faça login como administrador.')
         return redirect('/admin/login')
 
-    # fetch admin first_login flag to determine access
     try:
         conn = Conexao.conectar()
-        ensure_first_login_column(conn)
-        cur = conn.cursor(dictionary=True)
-        try:
-            cur.execute('SELECT id, username, name, phone, first_login FROM admins WHERE id = %s', (admin_id,))
-            admin_row = cur.fetchone()
-        except Exception:
-            cur.execute('SELECT id, username, name, phone FROM admins WHERE id = %s', (admin_id,))
-            admin_row = cur.fetchone()
-            if admin_row is not None:
-                admin_row['first_login'] = 0
-        cur.close(); conn.close()
+        ensure_admin_schema(conn)
+        admin_row = fetch_admin(conn, admin_id=admin_id)
+        conn.close()
     except Exception:
         flash('Erro ao acessar o banco.')
         return redirect('/')
@@ -264,16 +714,11 @@ def admin_change():
         flash('Administrador não encontrado.')
         return redirect('/admin/login')
 
-    # if first_login == 1, make this page inaccessible
-    try:
-        if int(admin_row.get('first_login') or 0) == 1:
-            flash('A página de alteração não está disponível após o primeiro login.')
-            return redirect('/admin/agendas')
-    except Exception:
-        pass
+    is_first_login = int(admin_row.get('first_login') or 0) == 0
+    has_recovery_code = bool(admin_row.get('recovery_code_hash'))
 
     if request.method == 'GET':
-        return render_template('admin_change.html', admin=admin_row, csrf_token=session.get('csrf_token'))
+        return render_template('admin_change.html', admin=admin_row, is_first_login=is_first_login, has_recovery_code=has_recovery_code, csrf_token=session.get('csrf_token'))
 
     # POST: apply changes
     form_token = request.form.get('csrf_token')
@@ -286,40 +731,158 @@ def admin_change():
     password = request.form.get('password') or ''
     password2 = request.form.get('password2') or ''
 
-    if not password:
-        flash('Senha obrigatória.')
+    # No primeiro login exigimos uma senha nova (a senha padrão não deve continuar em uso).
+    # Depois disso, a senha só é alterada se o admin preencher os campos de propósito.
+    if is_first_login and not password:
+        flash('Defina uma senha para continuar.')
         return redirect('/admin/change')
-    if password != password2:
-        flash('As senhas não coincidem.')
-        return redirect('/admin/change')
+    if password or password2:
+        if len(password) < 6:
+            flash('A nova senha deve ter pelo menos 6 caracteres.')
+            return redirect('/admin/change')
+        if password != password2:
+            flash('As senhas não coincidem.')
+            return redirect('/admin/change')
 
-    name = normalize_name(name_raw) if name_raw.strip() else None
-    phone = normalize_phone(phone_raw) if phone_raw.strip() else None
+    name = normalize_name(name_raw) if name_raw.strip() else admin_row.get('name')
+    phone = normalize_phone(phone_raw) if phone_raw.strip() else admin_row.get('phone')
 
     try:
         conn = Conexao.conectar()
-        ensure_first_login_column(conn)
+        ensure_admin_schema(conn)
         cur = conn.cursor()
-        # mark first_login = 1 after admin updates their info
         if password:
             pwd_hash = hash_password(password)
             cur.execute('UPDATE admins SET name=%s, phone=%s, password_hash=%s, first_login=1 WHERE id = %s', (name, phone, pwd_hash, admin_id))
         else:
             cur.execute('UPDATE admins SET name=%s, phone=%s, first_login=1 WHERE id = %s', (name, phone, admin_id))
         conn.commit(); cur.close(); conn.close()
-        flash('Dados do administrador atualizados.')
+        flash('Dados atualizados com sucesso.')
         return redirect('/admin/agendas')
     except Exception:
         flash('Erro ao atualizar admin (banco).')
         return redirect('/admin/change')
 
 
+@app.route('/admin/recovery-code/gerar', methods=['POST'])
+def admin_gerar_codigo_recuperacao():
+    # Gera (ou substitui) o código de recuperação do admin logado. Mostrado
+    # apenas uma vez nesta resposta — só o hash fica salvo no banco.
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+
+    form_token = request.form.get('csrf_token')
+    if not form_token or form_token != session.get('csrf_token'):
+        flash('Requisição inválida (CSRF).')
+        return redirect('/admin/change')
+
+    code = generate_recovery_code()
+    try:
+        conn = Conexao.conectar()
+        ensure_admin_schema(conn)
+        cur = conn.cursor()
+        cur.execute('UPDATE admins SET recovery_code_hash=%s WHERE id = %s', (hash_recovery_code(code), admin_id))
+        conn.commit(); cur.close(); conn.close()
+    except Exception:
+        flash('Erro ao gerar o código de recuperação (banco).')
+        return redirect('/admin/change')
+
+    return render_template('admin_recovery_code.html', code=code, csrf_token=session.get('csrf_token'))
+
+
+@app.route('/admin/recuperar', methods=['GET', 'POST'])
+def admin_recuperar():
+    # Recuperação de senha sem depender de e-mail/SMS: usa o código de
+    # recuperação gerado previamente em "Minha conta".
+    if 'csrf_token' not in session:
+        session['csrf_token'] = str(uuid.uuid4())
+
+    if request.method == 'GET':
+        return render_template('admin_recuperar.html', csrf_token=session.get('csrf_token'))
+
+    form_token = request.form.get('csrf_token')
+    if not form_token or form_token != session.get('csrf_token'):
+        flash('Requisição inválida (CSRF).')
+        return redirect('/admin/recuperar')
+
+    username = (request.form.get('username') or '').strip()
+    code = request.form.get('code') or ''
+    password = request.form.get('password') or ''
+    password2 = request.form.get('password2') or ''
+
+    if not username or not code or not password:
+        flash('Preencha usuário, código de recuperação e a nova senha.')
+        return redirect('/admin/recuperar')
+    if len(password) < 6:
+        flash('A nova senha deve ter pelo menos 6 caracteres.')
+        return redirect('/admin/recuperar')
+    if password != password2:
+        flash('As senhas não coincidem.')
+        return redirect('/admin/recuperar')
+
+    rate_key = 'recovery:' + _login_rate_key(username)
+    locked, seconds_left = check_login_locked(rate_key)
+    if locked:
+        minutes = max(1, seconds_left // 60)
+        flash(f'Muitas tentativas. Tente novamente em {minutes} minuto(s).')
+        return redirect('/admin/recuperar')
+
+    try:
+        conn = Conexao.conectar()
+        ensure_admin_schema(conn)
+        row = fetch_admin(conn, username=username)
+    except Exception:
+        flash('Erro ao acessar o banco.')
+        return redirect('/admin/recuperar')
+
+    stored_hash = row.get('recovery_code_hash') if row else None
+    if not row or not stored_hash or not hmac.compare_digest(stored_hash, hash_recovery_code(code)):
+        register_login_failure(rate_key)
+        conn.close()
+        flash('Usuário ou código de recuperação inválidos.')
+        return redirect('/admin/recuperar')
+
+    clear_login_attempts(rate_key)
+
+    # Redefine a senha e já gera um novo código (o antigo deixa de valer)
+    new_code = generate_recovery_code()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            'UPDATE admins SET password_hash=%s, recovery_code_hash=%s WHERE id = %s',
+            (hash_password(password), hash_recovery_code(new_code), row.get('id'))
+        )
+        conn.commit(); cur.close(); conn.close()
+    except Exception:
+        flash('Erro ao redefinir a senha (banco).')
+        return redirect('/admin/recuperar')
+
+    flash('Senha redefinida com sucesso. Guarde o novo código de recuperação abaixo.')
+    return render_template('admin_recovery_code.html', code=new_code, csrf_token=session.get('csrf_token'))
+
+
 @app.route('/ocupados')
 def ocupados():
-    # retorna JSON com lista de horários ocupados para uma data YYYY-MM-DD
+    # Retorna JSON com os horários ocupados E os horários permitidos (segundo o
+    # horário de funcionamento configurado em /admin/horarios) para uma data.
     date_str = request.args.get('date')
     if not date_str:
         return jsonify({'error': 'missing date'}), 400
+
+    try:
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        allowed = generate_allowed_slots_for_date_obj(selected_date)
+        if selected_date == date.today():
+            now = datetime.now()
+            allowed = [
+                t for t in allowed
+                if datetime(now.year, now.month, now.day, int(t.split(':')[0]), int(t.split(':')[1])) > now
+            ]
+    except Exception:
+        allowed = []
+
     occupied = []
     try:
         conn = Conexao.conectar()
@@ -327,20 +890,13 @@ def ocupados():
         cur.execute("SELECT time FROM agendamentos WHERE date = %s", (date_str,))
         rows = cur.fetchall()
         for r in rows:
-            # r may be tuple
             t = r[0] if isinstance(r, (list, tuple)) else r
-            # time might come as datetime.time; convert to HH:MM
-            try:
-                s = t.strftime('%H:%M')
-            except Exception:
-                s = str(t)
-            # normalize to 'HH:MM'
-            occupied.append(s[:5])
+            occupied.append(format_time_value(t))
         cur.close(); conn.close()
     except Exception:
         # on DB error, return empty array (frontend will still show available slots)
         occupied = []
-    return jsonify({'occupied': occupied})
+    return jsonify({'occupied': occupied, 'allowed': allowed})
 
 @app.route("/cadastro", methods=["POST"])
 def cadastro():
@@ -386,7 +942,7 @@ def agendamento():
         session['csrf_token'] = str(uuid.uuid4())
     # passar a data mínima (hoje) para o template
     today = date.today().isoformat()
-    return render_template('agendamento.html', usuario=usuario, csrf_token=session.get('csrf_token'), services=SERVICES, today=today)
+    return render_template('agendamento.html', usuario=usuario, csrf_token=session.get('csrf_token'), services=load_services(active_only=True), today=today)
 
 
 @app.route('/confirmar', methods=['POST'])
@@ -401,7 +957,7 @@ def confirmar():
         flash('Usuário não autenticado.')
         return redirect('/')
     service_key = request.form.get('service')
-    svc = SERVICES.get(service_key)
+    svc = load_services(active_only=True).get(service_key)
     if not svc:
         flash('Serviço inválido.')
         return redirect('/agendamento')
@@ -506,6 +1062,10 @@ def confirmar():
         if booking_id:
             session['last_booking_id'] = booking_id
 
+        # Avisa o admin por e-mail (se configurado). Nunca deve quebrar o
+        # agendamento em si — send_admin_booking_notification já se protege.
+        send_admin_booking_notification(booking)
+
         flash('Agendamento confirmado e salvo no banco!')
         return redirect('/confirmacao')
     except Exception as e:
@@ -550,11 +1110,11 @@ def confirmacao():
             r = cur.fetchone()
             cur.close(); conn.close()
             if r:
-                svc = SERVICES.get(r.get('service_key')) or {}
+                svc = load_services(active_only=False).get(r.get('service_key')) or {}
                 booking = {
                     'id': r.get('id'),
-                    'date': r.get('date'),
-                    'time': r.get('time'),
+                    'date': format_date_value(r.get('date')),
+                    'time': format_time_value(r.get('time')),
                     'service_label': svc.get('label', r.get('service_key')),
                     'price': svc.get('price'),
                     'usuario': {'nome': r.get('client_name'), 'numero': r.get('client_phone')}
@@ -572,7 +1132,9 @@ def confirmacao():
         flash('Nenhum agendamento encontrado.')
         return redirect('/')
 
-    return render_template('confirmacao.html', booking=booking, usuario=session.get('usuario'), csrf_token=session.get('csrf_token'))
+    whatsapp_link = build_whatsapp_confirmation_link(booking)
+
+    return render_template('confirmacao.html', booking=booking, usuario=session.get('usuario'), csrf_token=session.get('csrf_token'), whatsapp_link=whatsapp_link)
 
 
 @app.route('/meus_agendamentos')
@@ -588,8 +1150,9 @@ def meus_agendamentos():
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT id, date, time, service_key, created_at FROM agendamentos WHERE client_phone = %s ORDER BY date, time", (usuario.get('numero'),))
         rows = cur.fetchall()
+        services_map = load_services(active_only=False)
         for r in rows:
-            svc = SERVICES.get(r['service_key'], {})
+            svc = services_map.get(r['service_key'], {})
             all_bookings.append({
                 'id': r['id'], 'date': r['date'], 'time': r['time'], 'service_label': svc.get('label', r['service_key']), 'usuario': usuario, 'client_phone': usuario.get('numero')
             })
@@ -694,7 +1257,7 @@ def alterar():
                 if not r:
                     flash('Agendamento não encontrado.')
                     return redirect('/meus_agendamentos')
-                svc = SERVICES.get(r['service_key'], {})
+                svc = load_services(active_only=False).get(r['service_key'], {})
                 booking = {'id': r['id'], 'date': r['date'], 'time': r['time'], 'service_label': svc.get('label', r['service_key'])}
                 return render_template('alterar.html', booking=booking, booking_type='db', booking_id=bid, csrf_token=session.get('csrf_token'), usuario=usuario)
             except Exception:
@@ -778,26 +1341,329 @@ def admin_logout():
     return redirect('/')
 
 
+@app.route('/admin/cancelar', methods=['POST'])
+def admin_cancelar():
+    # Permite ao administrador cancelar qualquer agendamento diretamente pelo dashboard
+    # (diferente de /cancelar, que só permite ao próprio cliente cancelar o seu).
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+
+    form_token = request.form.get('csrf_token')
+    if not form_token or form_token != session.get('csrf_token'):
+        flash('Requisição inválida (CSRF).')
+        return redirect('/admin/agendas')
+
+    bid = request.form.get('booking_id')
+    if not bid:
+        flash('Agendamento inválido.')
+        return redirect('/admin/agendas')
+
+    try:
+        conn = Conexao.conectar()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM agendamentos WHERE id = %s", (bid,))
+        deleted = cur.rowcount
+        conn.commit()
+        cur.close(); conn.close()
+        if deleted:
+            flash('Agendamento cancelado.')
+        else:
+            flash('Agendamento não encontrado (já pode ter sido cancelado).')
+    except Exception:
+        flash('Erro ao cancelar o agendamento (banco).')
+
+    return redirect('/admin/agendas')
+
+
+def slugify_service_key(label, existing_keys):
+    """Gera uma chave única (slug) a partir do rótulo de um serviço novo."""
+    base = re.sub(r'[^a-z0-9]+', '_', (label or '').strip().lower()).strip('_') or 'servico'
+    key = base
+    i = 2
+    while key in existing_keys:
+        key = f"{base}_{i}"
+        i += 1
+    return key
+
+
+@app.route('/admin/servicos', methods=['GET'])
+def admin_servicos():
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+    services = load_services(active_only=False)
+    return render_template('admin_servicos.html', services=services, csrf_token=session.get('csrf_token'), usuario=session.get('usuario'))
+
+
+@app.route('/admin/servicos/adicionar', methods=['POST'])
+def admin_servicos_adicionar():
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+
+    form_token = request.form.get('csrf_token')
+    if not form_token or form_token != session.get('csrf_token'):
+        flash('Requisição inválida (CSRF).')
+        return redirect('/admin/servicos')
+
+    label = (request.form.get('label') or '').strip()
+    description = (request.form.get('description') or '').strip()
+    price_raw = (request.form.get('price') or '').strip()
+
+    if not label or not price_raw:
+        flash('Preencha o nome e o preço do serviço.')
+        return redirect('/admin/servicos')
+    try:
+        price = int(round(float(price_raw.replace(',', '.'))))
+        if price < 0:
+            raise ValueError
+    except ValueError:
+        flash('Preço inválido.')
+        return redirect('/admin/servicos')
+
+    try:
+        conn = Conexao.conectar()
+        ensure_services_table(conn)
+        cur = conn.cursor(dictionary=True)
+        cur.execute('SELECT `key` FROM services')
+        existing_keys = {r['key'] for r in cur.fetchall()}
+        new_key = slugify_service_key(label, existing_keys)
+        cur.execute('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM services')
+        next_order = cur.fetchone()['next_order']
+        cur.execute(
+            'INSERT INTO services (`key`, label, description, price, image, active, sort_order) VALUES (%s,%s,%s,%s,NULL,1,%s)',
+            (new_key, label, description or None, price, next_order)
+        )
+        conn.commit(); cur.close(); conn.close()
+        flash(f'Serviço "{label}" adicionado.')
+    except Exception:
+        flash('Erro ao adicionar o serviço (banco).')
+
+    return redirect('/admin/servicos')
+
+
+@app.route('/admin/servicos/atualizar', methods=['POST'])
+def admin_servicos_atualizar():
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+
+    form_token = request.form.get('csrf_token')
+    if not form_token or form_token != session.get('csrf_token'):
+        flash('Requisição inválida (CSRF).')
+        return redirect('/admin/servicos')
+
+    key = request.form.get('key')
+    label = (request.form.get('label') or '').strip()
+    description = (request.form.get('description') or '').strip()
+    price_raw = (request.form.get('price') or '').strip()
+    active = 1 if request.form.get('active') == 'on' else 0
+
+    if not key or not label or not price_raw:
+        flash('Preencha o nome e o preço do serviço.')
+        return redirect('/admin/servicos')
+    try:
+        price = int(round(float(price_raw.replace(',', '.'))))
+        if price < 0:
+            raise ValueError
+    except ValueError:
+        flash('Preço inválido.')
+        return redirect('/admin/servicos')
+
+    try:
+        conn = Conexao.conectar()
+        ensure_services_table(conn)
+        cur = conn.cursor()
+        cur.execute(
+            'UPDATE services SET label=%s, description=%s, price=%s, active=%s WHERE `key`=%s',
+            (label, description or None, price, active, key)
+        )
+        conn.commit(); cur.close(); conn.close()
+        flash('Serviço atualizado.')
+    except Exception:
+        flash('Erro ao atualizar o serviço (banco).')
+
+    return redirect('/admin/servicos')
+
+
+@app.route('/admin/horarios', methods=['GET'])
+def admin_horarios():
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+    hours = load_business_hours()
+    days = [
+        {'weekday': w, 'label': WEEKDAY_LABELS_PT[w], **hours.get(w, {})}
+        for w in range(7)
+    ]
+    return render_template('admin_horarios.html', days=days, csrf_token=session.get('csrf_token'), usuario=session.get('usuario'))
+
+
+@app.route('/admin/horarios/salvar', methods=['POST'])
+def admin_horarios_salvar():
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+
+    form_token = request.form.get('csrf_token')
+    if not form_token or form_token != session.get('csrf_token'):
+        flash('Requisição inválida (CSRF).')
+        return redirect('/admin/horarios')
+
+    time_pattern = re.compile(r'^([01]\d|2[0-3]):[0-5]\d$')
+
+    def clean_time(value):
+        value = (value or '').strip()
+        return value if time_pattern.match(value) else None
+
+    try:
+        conn = Conexao.conectar()
+        ensure_business_hours_table(conn)
+        cur = conn.cursor()
+        for weekday in range(7):
+            is_closed = 1 if request.form.get(f'closed_{weekday}') == 'on' else 0
+            open_time = clean_time(request.form.get(f'open_{weekday}'))
+            close_time = clean_time(request.form.get(f'close_{weekday}'))
+            break_start = clean_time(request.form.get(f'break_start_{weekday}'))
+            break_end = clean_time(request.form.get(f'break_end_{weekday}'))
+            # intervalo só vale se ambos os limites forem informados
+            if not (break_start and break_end):
+                break_start = None
+                break_end = None
+            cur.execute(
+                '''UPDATE business_hours
+                   SET is_closed=%s, open_time=%s, close_time=%s, break_start=%s, break_end=%s
+                   WHERE weekday=%s''',
+                (is_closed, open_time, close_time, break_start, break_end, weekday)
+            )
+        conn.commit(); cur.close(); conn.close()
+        flash('Horário de funcionamento atualizado.')
+    except Exception:
+        flash('Erro ao salvar o horário (banco).')
+
+    return redirect('/admin/horarios')
+
+
+@app.route('/admin/galeria', methods=['GET'])
+def admin_galeria():
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+    images = load_gallery_images()
+    return render_template('admin_galeria.html', images=images, csrf_token=session.get('csrf_token'), usuario=session.get('usuario'))
+
+
+@app.route('/admin/galeria/upload', methods=['POST'])
+def admin_galeria_upload():
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+
+    form_token = request.form.get('csrf_token')
+    if not form_token or form_token != session.get('csrf_token'):
+        flash('Requisição inválida (CSRF).')
+        return redirect('/admin/galeria')
+
+    file = request.files.get('photo')
+    if not file or not file.filename:
+        flash('Escolha uma foto para enviar.')
+        return redirect('/admin/galeria')
+
+    ext = os.path.splitext(secure_filename(file.filename))[1].lower()
+    if ext not in GALLERY_ALLOWED_EXTENSIONS:
+        flash('Formato não suportado. Envie uma imagem JPG, PNG ou WEBP.')
+        return redirect('/admin/galeria')
+
+    try:
+        os.makedirs(GALLERY_UPLOAD_DIR, exist_ok=True)
+        filename = f"{uuid.uuid4().hex}{ext}"
+        file.save(os.path.join(GALLERY_UPLOAD_DIR, filename))
+
+        conn = Conexao.conectar()
+        ensure_gallery_table(conn)
+        cur = conn.cursor()
+        cur.execute('SELECT COALESCE(MAX(sort_order), -1) + 1 FROM gallery_images')
+        (next_order,) = cur.fetchone()
+        cur.execute('INSERT INTO gallery_images (filename, sort_order) VALUES (%s, %s)', (filename, next_order))
+        conn.commit(); cur.close(); conn.close()
+        flash('Foto adicionada à galeria.')
+    except Exception:
+        flash('Erro ao enviar a foto.')
+
+    return redirect('/admin/galeria')
+
+
+@app.route('/admin/galeria/excluir', methods=['POST'])
+def admin_galeria_excluir():
+    admin_id = session.get('admin_id')
+    if not admin_id:
+        flash('Faça login como administrador.')
+        return redirect('/admin/login')
+
+    form_token = request.form.get('csrf_token')
+    if not form_token or form_token != session.get('csrf_token'):
+        flash('Requisição inválida (CSRF).')
+        return redirect('/admin/galeria')
+
+    image_id = request.form.get('image_id')
+    if not image_id:
+        flash('Imagem inválida.')
+        return redirect('/admin/galeria')
+
+    try:
+        conn = Conexao.conectar()
+        ensure_gallery_table(conn)
+        cur = conn.cursor(dictionary=True)
+        cur.execute('SELECT filename FROM gallery_images WHERE id = %s', (image_id,))
+        row = cur.fetchone()
+        cur.execute('DELETE FROM gallery_images WHERE id = %s', (image_id,))
+        conn.commit(); cur.close(); conn.close()
+        if row:
+            try:
+                os.remove(os.path.join(GALLERY_UPLOAD_DIR, row['filename']))
+            except OSError:
+                pass
+            flash('Foto removida.')
+        else:
+            flash('Foto não encontrada.')
+    except Exception:
+        flash('Erro ao remover a foto (banco).')
+
+    return redirect('/admin/galeria')
+
+
 @app.route('/admin/agendas')
 def admin_agendas():
-    # página para administrador ver todas as agendas detalhadamente
+    # Dashboard do administrador: KPIs, agenda do dia, tendência e distribuição
+    # por serviço, além da lista completa e pesquisável de agendamentos.
     admin_id = session.get('admin_id')
     if not admin_id:
         flash('Faça login como administrador.')
         return redirect('/admin/login')
 
     agendas = []
+    services_map = load_services(active_only=False)
     try:
         conn = Conexao.conectar()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT id, date, time, client_name, client_phone, service_key, created_at FROM agendamentos ORDER BY date DESC, time DESC")
         rows = cur.fetchall()
         for r in rows:
-            svc = SERVICES.get(r.get('service_key'), {})
+            svc = services_map.get(r.get('service_key'), {})
             agendas.append({
                 'id': r.get('id'),
-                'date': r.get('date'),
-                'time': r.get('time'),
+                'date': format_date_value(r.get('date')),
+                'time': format_time_value(r.get('time')),
+                'service_key': r.get('service_key'),
                 'service_label': svc.get('label', r.get('service_key')),
                 'price': svc.get('price'),
                 'client_name': r.get('client_name'),
@@ -808,7 +1674,92 @@ def admin_agendas():
     except Exception:
         flash('Erro ao acessar agendamentos (banco).')
 
-    return render_template('admin_agendas.html', agendas=agendas, csrf_token=session.get('csrf_token'), usuario=session.get('usuario'))
+    # ---- Agregações do dashboard (calculadas em cima da lista já buscada,
+    # sem novas consultas ao banco) ----
+    today = date.today()
+    today_str = today.isoformat()
+    now_hhmm = datetime.now().strftime('%H:%M')
+    week_start_str = (today - timedelta(days=today.weekday())).isoformat()
+    month_prefix = today.strftime('%Y-%m')
+
+    today_list = sorted([a for a in agendas if a['date'] == today_str], key=lambda a: a['time'])
+    week_list = [a for a in agendas if a['date'] >= week_start_str]
+    month_list = [a for a in agendas if a['date'].startswith(month_prefix)]
+    month_revenue = sum(a['price'] or 0 for a in month_list)
+    unique_clients = len(set(a['client_phone'] for a in agendas if a.get('client_phone')))
+
+    svc_counts = {}
+    for a in agendas:
+        k = a.get('service_key')
+        if k:
+            svc_counts[k] = svc_counts.get(k, 0) + 1
+    top_service = None
+    if svc_counts:
+        best_key = max(svc_counts.items(), key=lambda x: x[1])[0]
+        top_service = {'label': services_map.get(best_key, {}).get('label', best_key), 'count': svc_counts[best_key]}
+
+    upcoming = None
+    for a in sorted(agendas, key=lambda a: (a['date'], a['time'])):
+        if a['date'] > today_str or (a['date'] == today_str and a['time'] >= now_hhmm):
+            upcoming = a
+            break
+
+    stats = {
+        'today_count': len(today_list),
+        'week_count': len(week_list),
+        'month_revenue': month_revenue,
+        'total_count': len(agendas),
+        'unique_clients': unique_clients,
+        'top_service': top_service,
+        'upcoming': upcoming,
+    }
+
+    # Série dos últimos 14 dias para o gráfico de tendência
+    days_series = []
+    for i in range(13, -1, -1):
+        d_str = (today - timedelta(days=i)).isoformat()
+        day_bookings = [a for a in agendas if a['date'] == d_str]
+        days_series.append({
+            'date': d_str,
+            'bookings': len(day_bookings),
+            'revenue': sum(a['price'] or 0 for a in day_bookings),
+        })
+    max_day_bookings = max((d['bookings'] for d in days_series), default=0)
+
+    # Distribuição por serviço (top 5 + "Outros"), já pronta como conic-gradient
+    palette = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)']
+    dist_sorted = sorted(svc_counts.items(), key=lambda x: -x[1])
+    top_dist = dist_sorted[:5]
+    rest_count = sum(c for _, c in dist_sorted[5:])
+    slices = []
+    for i, (key, cnt) in enumerate(top_dist):
+        slices.append({'label': services_map.get(key, {}).get('label', key), 'count': cnt, 'color': palette[i % len(palette)]})
+    if rest_count:
+        slices.append({'label': 'Outros', 'count': rest_count, 'color': 'var(--muted)'})
+
+    total_slices = sum(s['count'] for s in slices) or 1
+    cursor_pct = 0.0
+    gradient_parts = []
+    for s in slices:
+        pct = s['count'] / total_slices * 100
+        s['pct'] = round(pct, 1)
+        gradient_parts.append(f"{s['color']} {cursor_pct:.2f}% {cursor_pct + pct:.2f}%")
+        cursor_pct += pct
+    donut_gradient = ', '.join(gradient_parts) if gradient_parts else 'var(--surface-2) 0% 100%'
+
+    return render_template(
+        'admin_agendas.html',
+        agendas=agendas,
+        csrf_token=session.get('csrf_token'),
+        usuario=session.get('usuario'),
+        today_str=today_str,
+        stats=stats,
+        today_list=today_list,
+        days_series=days_series,
+        max_day_bookings=max_day_bookings,
+        service_slices=slices,
+        donut_gradient=donut_gradient,
+    )
 
 
 @app.route('/admin/relatorio')
@@ -831,6 +1782,7 @@ def admin_relatorio():
     per_day = {}
     total_revenue = 0
     bookings_count = 0
+    services_map = load_services(active_only=False)
     try:
         conn = Conexao.conectar()
         cur = conn.cursor()
@@ -845,7 +1797,7 @@ def admin_relatorio():
 
         if svc_counts:
             best = max(svc_counts.items(), key=lambda x: x[1])
-            most_booked = {'service_key': best[0], 'label': SERVICES.get(best[0], {}).get('label', best[0]), 'count': best[1]}
+            most_booked = {'service_key': best[0], 'label': services_map.get(best[0], {}).get('label', best[0]), 'count': best[1]}
 
         # revenue per day (group by date and service_key, then multiply by price)
         cur.execute("SELECT date, service_key, COUNT(*) FROM agendamentos WHERE date BETWEEN %s AND %s GROUP BY date, service_key ORDER BY date ASC", (start_date, end_date))
@@ -854,7 +1806,7 @@ def admin_relatorio():
             d = r[0]
             key = r[1]
             cnt = int(r[2])
-            price = SERVICES.get(key, {}).get('price', 0)
+            price = services_map.get(key, {}).get('price', 0)
             rev = cnt * price
             per_day.setdefault(str(d), {'revenue': 0, 'bookings': 0})
             per_day[str(d)]['revenue'] += rev

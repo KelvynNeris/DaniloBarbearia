@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — Serviços</title>
+  <script>(function(){try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+  <style>
+    .service-row{display:grid;grid-template-columns:1.3fr 1.6fr 110px auto auto;gap:10px;align-items:center;padding:14px 0;border-top:1px solid var(--line)}
+    .service-row:first-of-type{border-top:none}
+    .service-row input[type="text"]{width:100%;padding:0.6rem 0.7rem;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text)}
+    .service-row .price-input{width:100%;padding:0.6rem 0.7rem;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text)}
+    .service-row label.active-toggle{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:0.85rem;white-space:nowrap}
+    .add-form{display:grid;grid-template-columns:1.3fr 1.6fr 110px auto;gap:10px;align-items:end}
+    .add-form .field label{display:block;font-size:0.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px}
+    .add-form .field input{width:100%;padding:0.65rem 0.8rem;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text)}
+    @media(max-width:900px){
+      .service-row{grid-template-columns:1fr;gap:8px}
+      .add-form{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/">Danilo<span>Barbearia</span></a>
+      <div class="header-controls">
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Alternar tema" title="Alternar tema">🌙</button>
+        <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
+          <span class="hamburger"></span>
+        </button>
+      </div>
+      <nav class="site-nav" aria-label="Navegação principal">
+        <button class="nav-close" aria-label="Fechar menu">&times;</button>
+        <ul>
+          <li><a href="/admin/change" class="{{ 'active' if request.path == '/admin/change' else '' }}">Minha conta</a></li>
+          <li><a href="/admin/agendas" class="{{ 'active' if request.path == '/admin/agendas' else '' }}">Agendas</a></li>
+          <li><a href="/admin/relatorio" class="{{ 'active' if request.path == '/admin/relatorio' else '' }}">Relatório</a></li>
+          <li><a href="/admin/servicos" class="{{ 'active' if request.path == '/admin/servicos' else '' }}">Serviços</a></li>
+          <li><a href="/admin/horarios" class="{{ 'active' if request.path == '/admin/horarios' else '' }}">Horários</a></li>
+          <li><a href="/admin/galeria" class="{{ 'active' if request.path == '/admin/galeria' else '' }}">Galeria</a></li>
+          <li><a href="/">Voltar</a></li>
+          <li><form action="/admin/logout" method="post" style="margin:0;padding:0"><button type="submit" style="background:none;border:none;color:inherit;cursor:pointer;text-decoration:none;font-weight:600;padding:0.5rem 0;display:block">Sair</button></form></li>
+        </ul>
+      </nav>
+    </div>
+    <style>
+      .nav-toggle{background:transparent;border:0;padding:0.4rem;border-radius:8px;color:var(--text);display:inline-flex;align-items:center}
+      .nav-toggle:focus{outline:2px solid var(--accent)}
+      .hamburger{width:22px;height:2px;background:var(--text);display:block;position:relative}
+      .hamburger::before,.hamburger::after{content:'';position:absolute;left:0;width:22px;height:2px;background:var(--text);}
+      .hamburger::before{top:-6px}.hamburger::after{top:6px}
+      .hamburger, .hamburger::before, .hamburger::after { transition: transform .2s ease, top .18s ease, opacity .18s ease, background .18s ease; transform-origin: center; }
+      .nav-toggle[aria-expanded="true"] .hamburger{ background: transparent; }
+      .nav-toggle[aria-expanded="true"] .hamburger::before{ top:0; transform: rotate(45deg); }
+      .nav-toggle[aria-expanded="true"] .hamburger::after{ top:0; transform: rotate(-45deg); }
+      .site-nav{position:fixed;right:0;top:0;height:100vh;width:70%;max-width:320px;background:var(--drawer-bg);backdrop-filter:blur(16px);border-left:1px solid var(--line);box-shadow:-12px 0 30px rgba(17,24,39,0.10);transform:translateX(100%);transition:transform .28s ease,opacity .2s;opacity:0;padding:3.5rem 1rem}
+      .site-nav.open{transform:translateX(0);opacity:1}
+      .site-nav ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0.75rem}
+      .site-nav a{color:var(--text);text-decoration:none;font-weight:600;padding:0.5rem 0;display:block}
+      .site-nav .nav-close{position:absolute;right:1rem;top:0.8rem;background:transparent;border:0;color:var(--text);font-size:1.5rem;padding:0.25rem;cursor:pointer}
+      .site-nav .nav-close:focus{outline:2px solid rgba(17,24,39,0.12)}
+    </style>
+  </header>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="container flash-messages">
+        {% for msg in messages %}<div class="flash">{{ msg }}</div>{% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <main class="container">
+    <div class="report-card">
+      <div class="report-head">
+        <div>
+          <h2>Serviços e preços</h2>
+          <div class="hint">O que estiver marcado como inativo some da tela de agendamento, mas continua aparecendo no histórico.</div>
+        </div>
+      </div>
+
+      <h3 style="margin-top:0">Adicionar novo serviço</h3>
+      <form class="add-form" action="/admin/servicos/adicionar" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field">
+          <label for="new_label">Nome</label>
+          <input id="new_label" name="label" type="text" required maxlength="255" placeholder="Ex: Coloração">
+        </div>
+        <div class="field">
+          <label for="new_description">Descrição (opcional)</label>
+          <input id="new_description" name="description" type="text" maxlength="500" placeholder="Frase curta que aparece no site">
+        </div>
+        <div class="field">
+          <label for="new_price">Preço (R$)</label>
+          <input id="new_price" name="price" type="number" min="0" step="1" required placeholder="50">
+        </div>
+        <button type="submit" class="btn primary">+ Adicionar</button>
+      </form>
+    </div>
+
+    <div class="report-card">
+      <h3 style="margin-top:0">Serviços cadastrados</h3>
+      {% if services and services|length > 0 %}
+        {% for key, s in services.items() %}
+        <form class="service-row" action="/admin/servicos/atualizar" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="key" value="{{ key }}">
+          <input type="text" name="label" value="{{ s.label }}" maxlength="255" required>
+          <input type="text" name="description" value="{{ s.description }}" maxlength="500" placeholder="Descrição">
+          <input class="price-input" type="number" name="price" value="{{ s.price }}" min="0" step="1" required>
+          <label class="active-toggle">
+            <input type="checkbox" name="active" {{ 'checked' if s.active else '' }}> Ativo
+          </label>
+          <button type="submit" class="btn">Salvar</button>
+        </form>
+        {% endfor %}
+      {% else %}
+        <p>Nenhum serviço cadastrado ainda.</p>
+      {% endif %}
+    </div>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

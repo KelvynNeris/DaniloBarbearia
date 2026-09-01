@@ -4,15 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Danilo Barbearia</title>
+    <script>(function(){try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
     </head>
 <body>
     <header class="site-header">
         <div class="container header-inner">
             <a class="brand" href="#">Danilo<span>Barbearia</span></a>
-            <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
-                <span class="hamburger"></span>
-            </button>
+            <div class="header-controls">
+                <button class="theme-toggle" id="themeToggle" type="button" aria-label="Alternar tema" title="Alternar tema">🌙</button>
+                <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
+                    <span class="hamburger"></span>
+                </button>
+            </div>
             <nav class="site-nav" aria-label="Navegação principal">
                 <button class="nav-close" aria-label="Fechar menu">&times;</button>
                 <ul>
@@ -65,66 +69,31 @@
         <section id="servicos" class="servicos container">
             <h2>Serviços</h2>
             <div class="cards">
+                {% for key, s in services.items() %}
                 <article class="card">
-                    <h3>Corte social com barba</h3>
-                    <p>Acabamento social + barba modelada.</p>
-                    <span class="price">R$ 50</span>
+                    <h3>{{ s.label }}</h3>
+                    <p>{{ s.description }}</p>
+                    <span class="price">R$ {{ s.price }}</span>
                 </article>
-                <article class="card">
-                    <h3>Corte degradê com barba</h3>
-                    <p>Degradê personalizado + barba.</p>
-                    <span class="price">R$ 52</span>
-                </article>
-                <article class="card">
-                    <h3>Corte degradê</h3>
-                    <p>Degradê limpo e bem marcado.</p>
-                    <span class="price">R$ 32</span>
-                </article>
-                <article class="card">
-                    <h3>Corte social</h3>
-                    <p>Corte social tradicional com finalização.</p>
-                    <span class="price">R$ 27</span>
-                </article>
-                <article class="card">
-                    <h3>Corte máquina</h3>
-                    <p>Corte rápido e preciso com máquina.</p>
-                    <span class="price">R$ 22</span>
-                </article>
-                <article class="card">
-                    <h3>Corte navalhado</h3>
-                    <p>Acabamento com navalha para linhas definidas.</p>
-                    <span class="price">R$ 32</span>
-                </article>
-                <article class="card">
-                    <h3>Barba</h3>
-                    <p>Modelagem, hidratação e finalização.</p>
-                    <span class="price">R$ 27</span>
-                </article>
-                <article class="card">
-                    <h3>Pezinho do cabelo</h3>
-                    <p>Ajuste nas laterais e nuca.</p>
-                    <span class="price">R$ 17</span>
-                </article>
-                <article class="card">
-                    <h3>Sobrancelha</h3>
-                    <p>Design e limpeza de sobrancelhas.</p>
-                    <span class="price">R$ 10</span>
-                </article>
-                <article class="card">
-                    <h3>Corte só Tesoura</h3>
-                    <p>Corte apenas com tesoura para acabamento mais natural.</p>
-                    <span class="price">R$ 32</span>
-                </article>
+                {% else %}
+                <p>Nenhum serviço cadastrado no momento.</p>
+                {% endfor %}
             </div>
         </section>
 
         <section id="galeria" class="galeria container">
             <h2>Galeria</h2>
             <div class="gallery-grid">
-                <div class="thumb"></div>
-                <div class="thumb"></div>
-                <div class="thumb"></div>
-                <div class="thumb"></div>
+                {% if gallery_images and gallery_images|length > 0 %}
+                    {% for g in gallery_images %}
+                    <div class="thumb"><img src="{{ url_for('static', filename='uploads/gallery/' + g.filename) }}" alt="Foto da Danilo Barbearia" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:8px"></div>
+                    {% endfor %}
+                {% else %}
+                    <div class="thumb"></div>
+                    <div class="thumb"></div>
+                    <div class="thumb"></div>
+                    <div class="thumb"></div>
+                {% endif %}
             </div>
         </section>
 
@@ -162,10 +131,12 @@
         </div>
     </div>
 
-    <footer class="site-footer">
+    <footer class="site-footer" id="contato">
         <div class="container">
             <p>© <span id="ano"></span> Danilo Barbearia — Todos os direitos reservados</p>
-            <p class="socials">Telefone: <a href="tel:+550000000000">(00) 0000-0000</a></p>
+            {% if barber_phone_digits %}
+            <p class="socials">Telefone / WhatsApp: <a href="tel:+{{ barber_phone_digits }}">{{ barber_phone_display }}</a></p>
+            {% endif %}
         </div>
     </footer>
 

@@ -3,20 +3,22 @@
 <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Admin — Todas as Agendas</title>
+        <title>Admin — Dashboard</title>
+        <script>(function(){try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
         <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
         <style>
             /* table tweaks for admin */
-            .agenda-card{max-width:1100px;margin:18px auto;padding:18px;border-radius:14px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.08));box-shadow:0 14px 40px rgba(2,6,23,0.45);border:1px solid rgba(255,255,255,0.03)}
+            .agenda-card{max-width:1100px;margin:18px auto;padding:18px;border-radius:14px;background:var(--panel);box-shadow:var(--shadow);border:1px solid var(--line)}
             .agenda-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
             .agenda-search{display:flex;gap:8px;align-items:center;justify-content:center;width:100%;max-width:420px;}
-            .search-input{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);min-width:220px}
+            .search-input{padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);min-width:220px}
             table.agendas{width:100%;border-collapse:collapse;min-width:800px}
-            table.agendas thead th{font-weight:700;text-align:left;padding:10px 12px;color:var(--muted);font-size:0.95rem;background:rgba(255,255,255,0.01)}
-            table.agendas tbody tr{background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.04));border-radius:0}
-            table.agendas td{padding:12px;text-align:left;vertical-align:middle;border-top:1px solid rgba(255,255,255,0.03)}
+            table.agendas thead th{font-weight:700;text-align:left;padding:10px 12px;color:var(--muted);font-size:0.95rem;background:var(--surface-2)}
+            table.agendas tbody tr{background:var(--panel);border-radius:0}
+            table.agendas td{padding:12px;text-align:left;vertical-align:middle;border-top:1px solid var(--line)}
             .muted-col{color:var(--muted);font-size:0.92rem}
             .right{text-align:right}
+            .dashboard-wrap{max-width:1200px;margin:22px auto;padding:0 1rem}
             @media(max-width:900px){ .agenda-head{flex-direction:column;align-items:stretch} .search-input{width:100%} .agenda-card{padding:8px} }
         </style>
 </head>
@@ -24,22 +26,28 @@
     <header class="site-header">
         <div class="container header-inner">
                         <a class="brand" href="/">Danilo<span>Barbearia</span></a>
-                        <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
-                            <span class="hamburger"></span>
-                        </button>
+                        <div class="header-controls">
+                            <button class="theme-toggle" id="themeToggle" type="button" aria-label="Alternar tema" title="Alternar tema">🌙</button>
+                            <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
+                                <span class="hamburger"></span>
+                            </button>
+                        </div>
             <nav class="site-nav" aria-label="Navegação principal">
                 <button class="nav-close" aria-label="Fechar menu">&times;</button>
                 <ul>
                     <li><a href="/admin/change" class="{{ 'active' if request.path == '/admin/change' else '' }}">Minha conta</a></li>
                     <li><a href="/admin/agendas" class="{{ 'active' if request.path == '/admin/agendas' else '' }}">Agendas</a></li>
                     <li><a href="/admin/relatorio" class="{{ 'active' if request.path == '/admin/relatorio' else '' }}">Relatório</a></li>
+                    <li><a href="/admin/servicos" class="{{ 'active' if request.path == '/admin/servicos' else '' }}">Serviços</a></li>
+                    <li><a href="/admin/horarios" class="{{ 'active' if request.path == '/admin/horarios' else '' }}">Horários</a></li>
+          <li><a href="/admin/galeria" class="{{ 'active' if request.path == '/admin/galeria' else '' }}">Galeria</a></li>
                     <li><a href="/">Voltar</a></li>
                     <li><form action="/admin/logout" method="post" style="margin:0;padding:0"><button type="submit" style="background:none;border:none;color:inherit;cursor:pointer;text-decoration:none;font-weight:600;padding:0.5rem 0;display:block">Sair</button></form></li>
                 </ul>
             </nav>
                                                 <style>
             .nav-toggle{background:transparent;border:0;padding:0.4rem;border-radius:8px;color:var(--text);display:inline-flex;align-items:center}
-            .nav-toggle:focus{outline:2px solid rgba(255,255,255,0.08)}
+            .nav-toggle:focus{outline:2px solid var(--accent)}
             .hamburger{width:22px;height:2px;background:var(--text);display:block;position:relative}
             .hamburger::before,.hamburger::after{content:'';position:absolute;left:0;width:22px;height:2px;background:var(--text);}
             .hamburger::before{top:-6px}.hamburger::after{top:6px}
@@ -53,14 +61,14 @@
             .nav-toggle[aria-expanded="true"] .hamburger::before{ top:0; transform: rotate(45deg); }
             .nav-toggle[aria-expanded="true"] .hamburger::after{ top:0; transform: rotate(-45deg); }
 
-            .site-nav{position:fixed;right:0;top:0;height:100vh;width:70%;max-width:320px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.25));backdrop-filter:blur(6px);transform:translateX(100%);transition:transform .28s ease,opacity .2s;opacity:0;padding:3.5rem 1rem}
+            .site-nav{position:fixed;right:0;top:0;height:100vh;width:70%;max-width:320px;background:var(--drawer-bg);backdrop-filter:blur(16px);border-left:1px solid var(--line);box-shadow:-12px 0 30px rgba(17,24,39,0.10);transform:translateX(100%);transition:transform .28s ease,opacity .2s;opacity:0;padding:3.5rem 1rem}
             .site-nav.open{transform:translateX(0);opacity:1}
             .site-nav ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0.75rem}
             .site-nav a{color:var(--text);text-decoration:none;font-weight:600;padding:0.5rem 0;display:block}
 
             /* botão fechar do menu móvel */
             .site-nav .nav-close{position:absolute;right:1rem;top:0.8rem;background:transparent;border:0;color:var(--text);font-size:1.5rem;padding:0.25rem;cursor:pointer}
-            .site-nav .nav-close:focus{outline:2px solid rgba(255,255,255,0.08)}
+            .site-nav .nav-close:focus{outline:2px solid rgba(17,24,39,0.12)}
                                                 </style>
         </div>
     </header>
@@ -75,18 +83,168 @@
         {% endif %}
     {% endwith %}
 
-    <main class="container">
+    <main class="dashboard-wrap">
+
+        <div class="dashboard-head">
+            <div>
+                <h1>Dashboard</h1>
+                <div class="dashboard-date">{{ today_str }}</div>
+            </div>
+            <a class="btn" href="/">← Voltar ao site</a>
+        </div>
+
+        {# ---------------- KPIs ---------------- #}
+        <div class="kpi-grid">
+            <div class="kpi-tile" style="--kpi-color: var(--chart-1)">
+                <div class="kpi-icon">📅</div>
+                <div class="kpi-label">Hoje</div>
+                <div class="kpi-value">{{ stats.today_count }}</div>
+                <div class="kpi-sub">agendamento{{ 's' if stats.today_count != 1 else '' }} hoje</div>
+            </div>
+            <div class="kpi-tile" style="--kpi-color: var(--chart-2)">
+                <div class="kpi-icon">🗓️</div>
+                <div class="kpi-label">Esta semana</div>
+                <div class="kpi-value">{{ stats.week_count }}</div>
+                <div class="kpi-sub">agendamentos na semana</div>
+            </div>
+            <div class="kpi-tile" style="--kpi-color: var(--chart-3)">
+                <div class="kpi-icon">💰</div>
+                <div class="kpi-label">Receita do mês</div>
+                <div class="kpi-value">R$ {{ stats.month_revenue }}</div>
+                <div class="kpi-sub">faturamento no mês</div>
+            </div>
+            <div class="kpi-tile" style="--kpi-color: var(--chart-4)">
+                <div class="kpi-icon">👥</div>
+                <div class="kpi-label">Clientes</div>
+                <div class="kpi-value">{{ stats.unique_clients }}</div>
+                <div class="kpi-sub">clientes únicos atendidos</div>
+            </div>
+            <div class="kpi-tile" style="--kpi-color: var(--chart-5)">
+                <div class="kpi-icon">⭐</div>
+                <div class="kpi-label">Mais pedido</div>
+                {% if stats.top_service %}
+                <div class="kpi-value" style="font-size:1.1rem">{{ stats.top_service.label }}</div>
+                <div class="kpi-sub">{{ stats.top_service.count }} agendamentos</div>
+                {% else %}
+                <div class="kpi-value">—</div>
+                <div class="kpi-sub">sem dados ainda</div>
+                {% endif %}
+            </div>
+            <div class="kpi-tile" style="--kpi-color: var(--accent)">
+                <div class="kpi-icon">⏭️</div>
+                <div class="kpi-label">Próximo</div>
+                {% if stats.upcoming %}
+                <div class="kpi-value" style="font-size:1.1rem">{{ stats.upcoming.time }}</div>
+                <div class="kpi-sub">{{ stats.upcoming.client_name }} · {{ stats.upcoming.date }}</div>
+                {% else %}
+                <div class="kpi-value">—</div>
+                <div class="kpi-sub">nenhum agendamento futuro</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# ---------------- Agenda de hoje + gráficos ---------------- #}
+        <div class="dashboard-main-grid">
+            <div class="panel">
+                <div class="panel-title">
+                    <h3>📋 Agenda de hoje</h3>
+                    <span class="hint">{{ today_list|length }} horário{{ 's' if today_list|length != 1 else '' }}</span>
+                </div>
+                {% if today_list and today_list|length > 0 %}
+                <ul class="timeline">
+                    {% for a in today_list %}
+                    <li class="timeline-item">
+                        <div class="timeline-time">{{ a.time }}</div>
+                        <div class="timeline-dot-col">
+                            <span class="timeline-dot"></span>
+                            <span class="timeline-line"></span>
+                        </div>
+                        <div class="timeline-body">
+                            <div class="name">{{ a.client_name }}</div>
+                            <div class="meta">
+                                <span>✂️ {{ a.service_label }}</span>
+                                <span>💲 {{ a.price if a.price is not none else '-' }}</span>
+                            </div>
+                        </div>
+                        <div class="timeline-actions">
+                            {% if a.client_phone %}
+                            <a class="quick-link" href="tel:{{ a.client_phone }}" title="Ligar">📞</a>
+                            <a class="quick-link" href="https://wa.me/{{ a.client_phone|replace('+','')|replace(' ','') }}" target="_blank" rel="noopener" title="WhatsApp">💬</a>
+                            {% endif %}
+                            <form action="/admin/cancelar" method="post" class="action-form" onsubmit="return confirm('Cancelar o agendamento de {{ a.client_name }} às {{ a.time }}?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="booking_id" value="{{ a.id }}">
+                                <button type="submit" class="quick-link quick-link-danger" title="Cancelar agendamento">🗑️</button>
+                            </form>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="empty-state">
+                    <span class="empty-icon">☕</span>
+                    Nenhum agendamento para hoje.
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="dashboard-col">
+                <div class="panel">
+                    <div class="panel-title">
+                        <h3>📈 Últimos 14 dias</h3>
+                        <span class="hint">agendamentos por dia</span>
+                    </div>
+                    {% if days_series and max_day_bookings > 0 %}
+                    <div class="bar-chart" role="img" aria-label="Agendamentos nos últimos 14 dias">
+                        {% for d in days_series %}
+                        <div class="bar-column" title="{{ d.date }}: {{ d.bookings }} agendamentos">
+                            <span class="bar-value">{{ d.bookings }}</span>
+                            <div class="bar-track"><div class="bar-fill bookings-bar" style="height: {{ (d.bookings / max_day_bookings * 100)|round(1) }}%"></div></div>
+                            <span class="bar-label">{{ d.date[8:10] }}/{{ d.date[5:7] }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="empty-state"><span class="empty-icon">📭</span>Sem agendamentos nos últimos 14 dias.</div>
+                    {% endif %}
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">
+                        <h3>✂️ Distribuição por serviço</h3>
+                        <span class="hint">todos os registros</span>
+                    </div>
+                    {% if service_slices and service_slices|length > 0 %}
+                    <div class="donut-wrap">
+                        <div class="donut" style="background: conic-gradient({{ donut_gradient }});">
+                            <div class="donut-hole">
+                                <span class="total">{{ stats.total_count }}</span>
+                                <span class="label">total</span>
+                            </div>
+                        </div>
+                        <ul class="donut-legend">
+                            {% for s in service_slices %}
+                            <li><span class="swatch" style="background:{{ s.color }}"></span><span class="label">{{ s.label }}</span><span class="count">{{ s.count }} · {{ s.pct }}%</span></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% else %}
+                    <div class="empty-state"><span class="empty-icon">✂️</span>Sem dados de serviços ainda.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# ---------------- Lista completa e pesquisável ---------------- #}
         <div class="agenda-card">
-            <div class="agenda-head">
+            <div class="dashboard-list-head">
                 <div>
-                    <h2 style="margin:0">Todas as Agendas</h2>
+                    <h2 style="margin:0">Todos os agendamentos</h2>
                     <div class="hint">Visão detalhada de todos os agendamentos</div>
                 </div>
-                <div style="flex:1;display:flex;justify-content:center;">
-                  <div class="agenda-search">
-                      <input id="q" class="search-input" placeholder="Buscar por nome, telefone ou serviço...">
-                      <input id="dateFilter" class="search-input" type="date" style="min-width:140px" title="Filtrar por data">
-                  </div>
+                <div class="agenda-search">
+                    <input id="q" class="search-input" placeholder="Buscar por nome, telefone ou serviço...">
+                    <input id="dateFilter" class="search-input" type="date" style="min-width:140px" title="Filtrar por data">
                 </div>
             </div>
 
@@ -95,7 +253,16 @@
                 {% for a in agendas %}
                 <article class="card appt-card">
                     <div class="card-body">
-                        <h3>{{ a.service_label }}</h3>
+                        <div class="meta" style="justify-content:space-between">
+                            <h3 style="margin:0">{{ a.service_label }}</h3>
+                            {% if a.date == today_str %}
+                                <span class="badge today">Hoje</span>
+                            {% elif a.date > today_str %}
+                                <span class="badge upcoming">Agendado</span>
+                            {% else %}
+                                <span class="badge past">Concluído</span>
+                            {% endif %}
+                        </div>
                         <div class="meta">
                             <span class="meta-item">#{{ a.id }}</span>
                             <span class="meta-item">📅 <strong>{{ a.date }}</strong></span>
@@ -109,6 +276,17 @@
                         <div class="meta" style="margin-top:0.5rem">
                             <span class="meta-item">🕓 <span class="muted-col">{{ a.created_at }}</span></span>
                         </div>
+                        <div class="card-actions">
+                            {% if a.client_phone %}
+                            <a class="btn" href="tel:{{ a.client_phone }}">📞 Ligar</a>
+                            <a class="btn" href="https://wa.me/{{ a.client_phone|replace('+','')|replace(' ','') }}" target="_blank" rel="noopener">💬 WhatsApp</a>
+                            {% endif %}
+                            <form action="/admin/cancelar" method="post" class="action-form" onsubmit="return confirm('Cancelar o agendamento #{{ a.id }} de {{ a.client_name }}?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="booking_id" value="{{ a.id }}">
+                                <button type="submit" class="btn danger">🗑️ Cancelar</button>
+                            </form>
+                        </div>
                     </div>
                 </article>
                 {% endfor %}
@@ -116,10 +294,6 @@
             {% else %}
                 <p>Nenhum agendamento encontrado.</p>
             {% endif %}
-
-            <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px">
-                <a class="btn" href="/">Voltar ao site</a>
-            </div>
         </div>
     </main>
 

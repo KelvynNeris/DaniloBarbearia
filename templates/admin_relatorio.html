@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin — Relatório</title>
+  <script>(function(){try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
   <!-- report styles moved to static/styles/style.css -->
 </head>
@@ -11,15 +12,21 @@
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/">Danilo<span>Barbearia</span></a>
-      <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
-        <span class="hamburger"></span>
-      </button>
+      <div class="header-controls">
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Alternar tema" title="Alternar tema">🌙</button>
+        <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false">
+          <span class="hamburger"></span>
+        </button>
+      </div>
       <nav class="site-nav" aria-label="Navegação principal">
         <button class="nav-close" aria-label="Fechar menu">&times;</button>
         <ul>
           <li><a href="/admin/change" class="{{ 'active' if request.path == '/admin/change' else '' }}">Minha conta</a></li>
           <li><a href="/admin/agendas" class="{{ 'active' if request.path == '/admin/agendas' else '' }}">Agendas</a></li>
           <li><a href="/admin/relatorio" class="{{ 'active' if request.path == '/admin/relatorio' else '' }}">Relatório</a></li>
+                    <li><a href="/admin/servicos" class="{{ 'active' if request.path == '/admin/servicos' else '' }}">Serviços</a></li>
+                    <li><a href="/admin/horarios" class="{{ 'active' if request.path == '/admin/horarios' else '' }}">Horários</a></li>
+          <li><a href="/admin/galeria" class="{{ 'active' if request.path == '/admin/galeria' else '' }}">Galeria</a></li>
           <li><a href="/">Voltar</a></li>
           <li><form action="/admin/logout" method="post" style="margin:0;padding:0"><button type="submit" style="background:none;border:none;color:inherit;cursor:pointer;text-decoration:none;font-weight:600;padding:0.5rem 0;display:block">Sair</button></form></li>
         </ul>
@@ -27,7 +34,7 @@
     </div>
     <style>
       .nav-toggle{background:transparent;border:0;padding:0.4rem;border-radius:8px;color:var(--text);display:inline-flex;align-items:center}
-      .nav-toggle:focus{outline:2px solid rgba(255,255,255,0.08)}
+      .nav-toggle:focus{outline:2px solid var(--accent)}
       .hamburger{width:22px;height:2px;background:var(--text);display:block;position:relative}
       .hamburger::before,.hamburger::after{content:'';position:absolute;left:0;width:22px;height:2px;background:var(--text);}
       .hamburger::before{top:-6px}.hamburger::after{top:6px}
@@ -41,14 +48,14 @@
       .nav-toggle[aria-expanded="true"] .hamburger::before{ top:0; transform: rotate(45deg); }
       .nav-toggle[aria-expanded="true"] .hamburger::after{ top:0; transform: rotate(-45deg); }
 
-      .site-nav{position:fixed;right:0;top:0;height:100vh;width:70%;max-width:320px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.25));backdrop-filter:blur(6px);transform:translateX(100%);transition:transform .28s ease,opacity .2s;opacity:0;padding:3.5rem 1rem}
+      .site-nav{position:fixed;right:0;top:0;height:100vh;width:70%;max-width:320px;background:var(--drawer-bg);backdrop-filter:blur(16px);border-left:1px solid var(--line);box-shadow:-12px 0 30px rgba(17,24,39,0.10);transform:translateX(100%);transition:transform .28s ease,opacity .2s;opacity:0;padding:3.5rem 1rem}
       .site-nav.open{transform:translateX(0);opacity:1}
       .site-nav ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:0.75rem}
       .site-nav a{color:var(--text);text-decoration:none;font-weight:600;padding:0.5rem 0;display:block}
 
       /* botão fechar do menu móvel */
       .site-nav .nav-close{position:absolute;right:1rem;top:0.8rem;background:transparent;border:0;color:var(--text);font-size:1.5rem;padding:0.25rem;cursor:pointer}
-      .site-nav .nav-close:focus{outline:2px solid rgba(255,255,255,0.08)}
+      .site-nav .nav-close:focus{outline:2px solid rgba(17,24,39,0.12)}
     </style>
   </header>
 

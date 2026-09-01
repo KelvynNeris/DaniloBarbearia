@@ -1,5 +1,35 @@
 // Script leve: menu hamburguer, ano no rodapé e validação simples para formulários
 document.addEventListener('DOMContentLoaded', function(){
+
+  // Alternância de tema claro/escuro (persiste em localStorage)
+  (function(){
+    var btn = document.getElementById('themeToggle');
+    function systemPrefersDark(){
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    function currentTheme(){
+      var stored = null;
+      try { stored = localStorage.getItem('theme'); } catch(e){}
+      return stored || (systemPrefersDark() ? 'dark' : 'light');
+    }
+    function updateIcon(){
+      if(!btn) return;
+      var dark = currentTheme() === 'dark';
+      btn.textContent = dark ? '☀️' : '🌙';
+      btn.setAttribute('aria-label', dark ? 'Ativar modo claro' : 'Ativar modo escuro');
+      btn.setAttribute('title', dark ? 'Ativar modo claro' : 'Ativar modo escuro');
+    }
+    updateIcon();
+    if(btn){
+      btn.addEventListener('click', function(){
+        var next = currentTheme() === 'dark' ? 'light' : 'dark';
+        try { localStorage.setItem('theme', next); } catch(e){}
+        document.documentElement.setAttribute('data-theme', next);
+        updateIcon();
+      });
+    }
+  })();
+
   var toggle = document.querySelector('.nav-toggle');
   var nav = document.querySelector('.site-nav');
   if(toggle && nav){
@@ -220,14 +250,13 @@ document.addEventListener('DOMContentLoaded', function(){
 
   function makeServiceSVG(name, price){
     var width = 900, height = 500;
-    var bg = '#0b1220';
-    var accent = '#d97706';
+    var bg = '#f0efec';
+    var accent = '#b45309';
     var escaped = name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+width+'" height="'+height+'">'
-      + '<defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#071124"/><stop offset="1" stop-color="#0b1220"/></linearGradient></defs>'
-      + '<rect width="100%" height="100%" fill="url(#g)" />'
-      + '<text x="50%" y="45%" font-family="Arial, Helvetica, sans-serif" font-size="44" fill="white" text-anchor="middle">'+escaped+'</text>'
-      + '<text x="50%" y="65%" font-family="Arial, Helvetica, sans-serif" font-size="28" fill="'+accent+'" text-anchor="middle">R$ '+price+'</text>'
+      + '<rect width="100%" height="100%" fill="'+bg+'" />'
+      + '<text x="50%" y="45%" font-family="Arial, Helvetica, sans-serif" font-size="44" fill="#1a1a1a" text-anchor="middle">'+escaped+'</text>'
+      + '<text x="50%" y="65%" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="bold" fill="'+accent+'" text-anchor="middle">R$ '+price+'</text>'
       + '</svg>';
     return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
   }
@@ -377,7 +406,6 @@ document.addEventListener('DOMContentLoaded', function(){
     if(!timeList) return;
     // clear
     timeList.innerHTML = '';
-    var slots = generateSlotsForDate(dateStr);
     // helper: normalize time strings to HH:MM
     function normalizeTimeString(s){
       if(!s) return '';
@@ -389,11 +417,14 @@ document.addEventListener('DOMContentLoaded', function(){
       return hh + ':' + mm;
     }
 
-    // fetch occupied slots from server (cache-busted)
+    // busca horários permitidos + ocupados no servidor (fonte de verdade: o
+    // horário de funcionamento configurado em /admin/horarios). Só usa a
+    // geração local como fallback se a requisição falhar de vez.
     fetch('/ocupados?date='+encodeURIComponent(dateStr)+'&_='+Date.now(), {cache:'no-store'}).then(function(res){
-      if(!res.ok) return {occupied:[]};
+      if(!res.ok) return {occupied:[], allowed:null};
       return res.json();
     }).then(function(data){
+      var slots = (data && Array.isArray(data.allowed)) ? data.allowed : generateSlotsForDate(dateStr);
       var occupiedRaw = (data && data.occupied) ? data.occupied : [];
       var occupied = occupiedRaw.map(normalizeTimeString);
       // render all slots, marking occupied ones
@@ -423,7 +454,8 @@ document.addEventListener('DOMContentLoaded', function(){
           // after building items, refresh selection and keyboard state
           try{ if(typeof updateTimeItemsState === 'function') updateTimeItemsState(); }catch(e){ /* ignore */ }
     }).catch(function(){
-      // on error, render local slots as enabled
+      // requisição falhou de vez (rede indisponível): usa a geração local como último recurso
+      var slots = generateSlotsForDate(dateStr);
       if(slots.length === 0){
         var li = document.createElement('li'); li.textContent = 'Nenhum horário disponível'; li.setAttribute('aria-disabled','true'); li.style.opacity = 0.7; timeList.appendChild(li); timeItems = [li]; return;
       }

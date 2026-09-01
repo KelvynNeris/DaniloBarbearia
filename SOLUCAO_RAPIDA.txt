@@ -1,0 +1,84 @@
+# INSTRUÇÕES RÁPIDAS - RESOLVER ERRO DE BANCO
+
+## O Problema
+O erro "Unknown database 'barbearia_db'" significa que o banco ainda não foi criado.
+
+## Solução em 3 Passos
+
+### 1. Abra o MySQL Workbench
+   - Conecte-se ao servidor MySQL local (localhost:3306)
+   - Use o usuário: root
+   - Senha: 988430466
+
+### 2. Execute o Script SQL
+   - No Workbench, vá em: **File → Open SQL Script**
+   - Navegue até: `C:\Users\kelvy\OneDrive\Desktop\Programas\DaniloBarbearia\`
+   - Selecione o arquivo: **setup_database.sql**
+   - Clique no ícone do **raio ⚡** (Execute) ou pressione **Ctrl+Shift+Enter**
+
+### 3. Verifique se Funcionou
+   - Você deve ver mensagens de sucesso
+   - Execute este comando no Workbench para confirmar:
+
+   ```sql
+   SHOW DATABASES;
+   ```
+
+   - O banco `barbearia_db` deve aparecer na lista
+
+### 4. Teste Novamente o Sistema
+   - Volte ao terminal
+   - Execute: `python app.py`
+   - Acesse: http://localhost:8080
+   - Login: adm / 123 / (99) 99999-9999
+
+---
+
+## ⚠️ IMPORTANTE
+
+Se o script SQL der erro, execute estes comandos manualmente no Workbench:
+
+```sql
+-- Criar o banco
+CREATE DATABASE barbearia_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Usar o banco
+USE barbearia_db;
+
+-- Criar tabela de agendamentos
+CREATE TABLE agendamentos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    date DATE NOT NULL,
+    time TIME NOT NULL,
+    client_name VARCHAR(255) NOT NULL,
+    client_phone VARCHAR(20) NOT NULL,
+    service_key VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_datetime (date, time),
+    INDEX idx_client_phone (client_phone),
+    INDEX idx_date (date)
+);
+
+-- Criar tabela de admins
+CREATE TABLE admins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(150) UNIQUE NOT NULL,
+    name VARCHAR(255),
+    phone VARCHAR(20),
+    password_hash VARCHAR(255) NOT NULL,
+    first_login TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Inserir admin padrão
+INSERT INTO admins (username, name, phone, password_hash, first_login)
+VALUES (
+    'adm',
+    'Administrador',
+    '+5599999999999',
+    'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3',
+    0
+);
+```
+
+Pronto! Depois disso o sistema vai funcionar.

@@ -1,0 +1,21 @@
+# Segredos e configuração local — nunca commitar
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Fotos enviadas pela galeria (conteúdo do usuário, não código)
+static/uploads/
+
+# Testes / cache
+.pytest_cache/
+
+# Editor / SO
+.vscode/
+.DS_Store
+Thumbs.db
