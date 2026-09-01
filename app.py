@@ -186,8 +186,17 @@ def admin_login():
         conn = Conexao.conectar()
         ensure_first_login_column(conn)
         cur = conn.cursor(dictionary=True)
-        cur.execute('SELECT id, username, name, phone, password_hash, first_login FROM admins WHERE username = %s LIMIT 1', (username,))
-        row = cur.fetchone()
+        try:
+            cur.execute('SELECT id, username, name, phone, password_hash, first_login FROM admins WHERE username = %s LIMIT 1', (username,))
+        except Exception:
+            cur.execute('SELECT id, username, name, phone, password_hash FROM admins WHERE username = %s LIMIT 1', (username,))
+            row = cur.fetchone()
+            if row is not None:
+                row['first_login'] = 0
+            else:
+                row = None
+        else:
+            row = cur.fetchone()
         cur.close(); conn.close()
         if not row:
             flash('Usuário/senha inválidos.')
@@ -238,8 +247,14 @@ def admin_change():
         conn = Conexao.conectar()
         ensure_first_login_column(conn)
         cur = conn.cursor(dictionary=True)
-        cur.execute('SELECT id, username, name, phone, first_login FROM admins WHERE id = %s', (admin_id,))
-        admin_row = cur.fetchone()
+        try:
+            cur.execute('SELECT id, username, name, phone, first_login FROM admins WHERE id = %s', (admin_id,))
+            admin_row = cur.fetchone()
+        except Exception:
+            cur.execute('SELECT id, username, name, phone FROM admins WHERE id = %s', (admin_id,))
+            admin_row = cur.fetchone()
+            if admin_row is not None:
+                admin_row['first_login'] = 0
         cur.close(); conn.close()
     except Exception:
         flash('Erro ao acessar o banco.')
