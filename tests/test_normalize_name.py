@@ -10,6 +10,8 @@ from app import normalize_name
     ("", ""),
     (None, ""),
     ("léia", "Léia"),
+    ("  maria   de   lourdes  ", "Maria De Lourdes"),
+    ("joão-pedro   o'neill", "João-Pedro O'neill"),
 ])
 def test_normalize_name(raw, expected):
     assert normalize_name(raw) == expected

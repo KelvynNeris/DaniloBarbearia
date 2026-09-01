@@ -1,9 +1,14 @@
-from flask import Flask, render_template, request, redirect, session, flash, jsonify
-import mysql.connector
+import os
 import uuid
 from datetime import datetime, date, timedelta, timezone
-from conexao import Conexao
+
+from dotenv import load_dotenv
+from flask import Flask, render_template, request, redirect, session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
+
+from conexao import Conexao
+
+load_dotenv()
 
 # Serviços disponíveis (chave -> rótulo, preço e imagem)
 SERVICES = {
@@ -20,7 +25,8 @@ SERVICES = {
 }
 
 app = Flask(__name__)
-app.secret_key = '0000'  # Chave secreta para gerenciamento de sessões
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-me-in-dev")
+app.secret_key = app.config["SECRET_KEY"]
 
 
 def generate_allowed_slots_for_date_obj(d):
@@ -67,19 +73,27 @@ def normalize_phone(raw):
 
 def normalize_name(raw):
     """Normalize a person's name so each word (and hyphenated subword) starts with an uppercase
-    letter and the rest are lowercase. Example: 'joão da silva' -> 'João Da Silva'."""
-    if not raw:
+    letter and the rest are lowercase. Example: 'joão da silva' -> 'João Da Silva'.
+
+    This intentionally preserves the established project convention for apostrophes and repeated
+    separators: the first letter of each word is uppercased, while the remainder is lowercased.
+    """
+    if raw is None:
         return ''
+
     s = str(raw).strip()
     if not s:
         return ''
-    # collapse multiple spaces
-    parts = s.split()
+
     normalized_parts = []
-    for p in parts:
-        # handle hyphenated names like 'anna-maria'
-        sub = [ (subp.lower().capitalize() if subp else subp) for subp in p.split('-') ]
-        normalized_parts.append('-'.join(sub))
+    for part in s.split():
+        normalized_subparts = []
+        for subpart in part.split('-'):
+            if not subpart:
+                continue
+            normalized_subparts.append(subpart[:1].upper() + subpart[1:].lower())
+        normalized_parts.append('-'.join(normalized_subparts))
+
     return ' '.join(normalized_parts)
 
 @app.route("/")
@@ -836,4 +850,8 @@ if __name__ == "__main__":
                 pass
 
     ensure_default_admin()
-    app.run(debug=True, host="0.0.0.0", port=8080)
+    app.run(
+        debug=os.getenv("FLASK_DEBUG", "false").lower() == "true",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "8080")),
+    )
