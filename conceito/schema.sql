@@ -75,9 +75,9 @@ CREATE TABLE IF NOT EXISTS admins (
 -- Se desejar apenas garantir a presença do registro sem gerar hash agora,
 -- a aplicação criará o administrador padrão automaticamente ao iniciar.
 
--- INSERT gerado com hash da senha '123' (gerado via werkzeug)
+-- Hash SHA-256 da senha '123' (valor determinístico e compatível com a aplicação)
 INSERT INTO admins (username, name, phone, password_hash)
-VALUES ('adm', 'adm', '+55 (99) 99999-9999', 'scrypt:32768:8:1$IDKMEqRzALJru5W3$0640f90d278e5e391e2f0b2aa90d402a4e50faf6745457d794d556ca817cef8b309cd9b85eaf72c20cca205c6b3c4cf21d2c225ba80eb206441fbd7fba2ae392');
+VALUES ('adm', 'adm', '+55 (99) 99999-9999', 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3');
 
 -- Se desejar apenas garantir a presença do registro sem gerar hash agora,
 -- a aplicação criará o administrador padrão automaticamente ao iniciar.

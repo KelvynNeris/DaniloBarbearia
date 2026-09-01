@@ -1,10 +1,11 @@
+import hashlib
 import os
 import uuid
 from datetime import datetime, date, timedelta, timezone
 
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, session, flash, jsonify
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import check_password_hash
 
 from conexao import Conexao
 
@@ -101,6 +102,27 @@ def normalize_name(raw):
     return ' '.join(normalized_parts)
 
 
+def hash_password(password: str) -> str:
+    """Return the SHA-256 hex digest of the password."""
+    if password is None:
+        password = ''
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+
+def verify_password(stored_hash: str, password: str) -> bool:
+    """Verify a password against a stored hash.
+    Supports SHA-256 and legacy Werkzeug hashes for compatibility.
+    """
+    if not stored_hash:
+        return False
+    if stored_hash.startswith('scrypt:') or stored_hash.startswith('pbkdf2:') or stored_hash.startswith('argon2:') or stored_hash.startswith('md5:'):
+        try:
+            return check_password_hash(stored_hash, password)
+        except Exception:
+            return False
+    return hash_password(password) == stored_hash
+
+
 def ensure_first_login_column(conn=None):
     """Create the first_login column if the admins table is older and missing it.
     This preserves the first-login flow without breaking legacy schemas.
@@ -170,7 +192,7 @@ def admin_login():
         if not row:
             flash('Usuário/senha inválidos.')
             return redirect('/admin/login')
-        if not check_password_hash(row.get('password_hash',''), password):
+        if not verify_password(row.get('password_hash',''), password):
             flash('Usuário/senha inválidos.')
             return redirect('/admin/login')
         # validate phone matches stored admin phone
@@ -265,7 +287,7 @@ def admin_change():
         cur = conn.cursor()
         # mark first_login = 1 after admin updates their info
         if password:
-            pwd_hash = generate_password_hash(password)
+            pwd_hash = hash_password(password)
             cur.execute('UPDATE admins SET name=%s, phone=%s, password_hash=%s, first_login=1 WHERE id = %s', (name, phone, pwd_hash, admin_id))
         else:
             cur.execute('UPDATE admins SET name=%s, phone=%s, first_login=1 WHERE id = %s', (name, phone, admin_id))
@@ -885,7 +907,7 @@ if __name__ == "__main__":
             cur.execute('SELECT id FROM admins WHERE username = %s LIMIT 1', (default_username,))
             row = cur.fetchone()
             if not row:
-                pwd_hash = generate_password_hash(default_password)
+                pwd_hash = hash_password(default_password)
                 phone_norm = normalize_phone(default_phone_raw)
                 name_norm = normalize_name(default_name)
                 cur.execute('INSERT INTO admins (username, name, phone, password_hash, first_login) VALUES (%s,%s,%s,%s,0)',
