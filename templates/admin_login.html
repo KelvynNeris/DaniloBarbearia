@@ -6,16 +6,200 @@
   <title>Login do Administrador — Danilo Barbearia</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
   <style>
-    /* small overrides to align inputs with site theme */
-    .auth-hero{padding:3.25rem 0;text-align:center}
-    .auth-card{max-width:480px;margin:0 auto;padding:28px;border-radius:14px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12));box-shadow:0 14px 40px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03)}
-    .auth-card h2{margin:0 0 8px}
-    .form-row{margin-bottom:12px}
-    label{display:block;margin-bottom:6px;color:var(--muted);font-weight:600}
-    input[type="text"],input[type="password"],input[type="tel"]{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);font-size:15px}
-    .form-actions{display:flex;justify-content:space-between;align-items:center;margin-top:14px}
-    .btn.primary{background:var(--accent);color:#071124;padding:10px 14px;border-radius:10px}
-    .hint{font-size:0.92rem;color:var(--muted)}
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      background: linear-gradient(135deg, rgba(7, 17, 36, 0.95) 0%, rgba(2, 6, 23, 0.98) 100%);
+    }
+
+    .site-header {
+      background: transparent;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 1rem 0;
+      margin-bottom: 2rem;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .auth-container {
+      width: 100%;
+      max-width: 500px;
+      margin-top: 0.5rem;
+    }
+
+    .auth-card {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 2.5rem 2.1rem 2rem;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .auth-card h1 {
+      font-size: 1.75rem;
+      margin: 0 0 0.5rem;
+      color: var(--text);
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .auth-card .subtitle {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+      display: block;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 0.82rem 1rem;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
+      background: rgba(10, 16, 25, 0.9);
+      color: #f8f5f0;
+      font-size: 1rem;
+      font-weight: 500;
+      transition: all 0.25s ease;
+      box-sizing: border-box;
+      min-height: 48px;
+      appearance: none;
+      -webkit-appearance: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    .form-group input::placeholder {
+      color: rgba(255, 255, 255, 0.38);
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: rgba(212, 168, 95, 0.9);
+      background: rgba(12, 18, 29, 0.98);
+      box-shadow: 0 0 0 3px rgba(212, 168, 95, 0.18), inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+
+    #username,
+    #loginPhone,
+    #password {
+      background: rgba(10, 16, 25, 0.92);
+      border: 1px solid rgba(212, 168, 95, 0.28);
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: 2rem;
+      align-items: center;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 0.85rem 1.35rem;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      text-decoration: none;
+      text-align: center;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      font-size: 1rem;
+      min-height: 48px;
+    }
+
+    .btn:hover {
+      border-color: rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, var(--accent) 0%, #f59e0b 100%);
+      color: #071124;
+      border: none;
+      font-weight: 700;
+    }
+
+    .btn.primary:hover {
+      background: linear-gradient(135deg, #ffc107 0%, #f59e0b 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(255, 193, 7, 0.3);
+    }
+
+    .btn.primary:active {
+      transform: translateY(0);
+    }
+
+    .flash-messages {
+      margin: 1rem 0;
+    }
+
+    .flash {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      padding: 1rem;
+      border-radius: 10px;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    .flash.success {
+      background: rgba(16, 185, 129, 0.1);
+      border-color: rgba(16, 185, 129, 0.3);
+      color: #86efac;
+    }
+
+    @media (min-width: 768px) {
+      .auth-container {
+        max-width: 520px;
+      }
+
+      .auth-card {
+        padding: 2.75rem 2.5rem 2.2rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .auth-card {
+        padding: 2rem 1.5rem;
+      }
+
+      .auth-card h1 {
+        font-size: 1.5rem;
+      }
+
+      .form-actions {
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
@@ -23,7 +207,7 @@
     <div class="container header-inner">
       <a class="brand" href="/">Danilo<span>Barbearia</span></a>
       <nav class="header-actions">
-        <a class="btn" href="/">Voltar</a>
+        <a class="btn" href="/">← Voltar</a>
       </nav>
     </div>
   </header>
@@ -40,38 +224,36 @@
   {% endwith %}
 
   <main>
-    <section class="hero auth-hero">
-      <div class="container">
-        <h1 style="margin-bottom:8px">Área do Administrador</h1>
-        <p class="hint">Acesse a gestão de agendas e configurações</p>
-      </div>
-    </section>
-
-    <section class="container">
+    <div class="auth-container">
       <div class="auth-card">
-        <h2>Entrar</h2>
-        <p class="hint">Informe suas credenciais de administrador</p>
+        <h1>🔐 Acesso Admin</h1>
+        <span class="subtitle">Informe suas credenciais para continuar</span>
+
         <form method="post" action="/admin/login" id="adminLoginForm">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <div class="form-row">
+          
+          <div class="form-group">
             <label for="username">Usuário</label>
-            <input id="username" name="username" required maxlength="150" placeholder="adm">
+            <input id="username" name="username" type="text" required maxlength="150" placeholder="Digite seu usuário">
           </div>
-          <div class="form-row">
+
+          <div class="form-group">
             <label for="loginPhone">Telefone</label>
-            <input id="loginPhone" name="phone" type="tel" required maxlength="20" placeholder="(xx) xxxxx-xxxx">
+            <input id="loginPhone" name="phone" type="tel" required maxlength="20" placeholder="(11) 99999-9999">
           </div>
-          <div class="form-row">
+
+          <div class="form-group">
             <label for="password">Senha</label>
-            <input id="password" name="password" type="password" required minlength="1" placeholder="Senha">
+            <input id="password" name="password" type="password" required minlength="1" placeholder="Digite sua senha">
           </div>
+
           <div class="form-actions">
             <a class="btn" href="/">Cancelar</a>
-            <button type="submit" class="btn primary">Entrar</button>
+            <button type="submit" class="btn primary">Entrar →</button>
           </div>
         </form>
       </div>
-    </section>
+    </div>
   </main>
 
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
@@ -79,11 +261,20 @@
     (function(){
       var el = document.getElementById('loginPhone');
       if(!el) return;
-      function fmt(v){var d=v.replace(/\D/g,'').slice(0,11); if(d.length<=2) return '('+d; if(d.length<=6) return '('+d.slice(0,2)+') '+d.slice(2); if(d.length<=10) return '('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6); return '('+d.slice(0,2)+') '+d.slice(2,7)+'-'+d.slice(7);} 
+      function fmt(v){
+        var d=v.replace(/\D/g,'').slice(0,11); 
+        if(d.length<=2) return '('+d; 
+        if(d.length<=6) return '('+d.slice(0,2)+') '+d.slice(2); 
+        if(d.length<=10) return '('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6); 
+        return '('+d.slice(0,2)+') '+d.slice(2,7)+'-'+d.slice(7);
+      } 
       el.addEventListener('input', function(){ el.value = fmt(el.value); });
       document.getElementById('adminLoginForm').addEventListener('submit', function(e){
         var digits = (el.value||'').replace(/\D/g,'');
-        if(digits.length !== 11){ e.preventDefault(); alert('Telefone inválido. Use o formato (xx) xxxxx-xxxx.'); }
+        if(digits.length !== 11){ 
+          e.preventDefault(); 
+          alert('Telefone inválido. Use o formato (11) 99999-9999.'); 
+        }
       });
     })();
   </script>
