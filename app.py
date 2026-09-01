@@ -96,6 +96,34 @@ def normalize_name(raw):
 
     return ' '.join(normalized_parts)
 
+
+def ensure_first_login_column(conn=None):
+    """Create the first_login column if the admins table is older and missing it.
+    This preserves the first-login flow without breaking legacy schemas.
+    """
+    close_conn = False
+    if conn is None:
+        conn = Conexao.conectar()
+        close_conn = True
+
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute('SHOW COLUMNS FROM admins')
+            columns = [str(col[0]).lower() for col in cur.fetchall()]
+            if 'first_login' not in columns:
+                try:
+                    cur.execute('ALTER TABLE admins ADD COLUMN first_login TINYINT(1) NOT NULL DEFAULT 0')
+                    conn.commit()
+                except Exception:
+                    pass
+        finally:
+            cur.close()
+    finally:
+        if close_conn:
+            conn.close()
+
+
 @app.route("/")
 def inicio():
     # Garante CSRF token na sessão e passa para o template
@@ -130,9 +158,9 @@ def admin_login():
 
     try:
         conn = Conexao.conectar()
+        ensure_first_login_column(conn)
         cur = conn.cursor(dictionary=True)
-        # include first_login flag in query
-        cur.execute('SELECT id, username, name, phone, password_hash, IFNULL(first_login,0) AS first_login FROM admins WHERE username = %s LIMIT 1', (username,))
+        cur.execute('SELECT id, username, name, phone, password_hash, first_login FROM admins WHERE username = %s LIMIT 1', (username,))
         row = cur.fetchone()
         cur.close(); conn.close()
         if not row:
@@ -182,8 +210,9 @@ def admin_change():
     # fetch admin first_login flag to determine access
     try:
         conn = Conexao.conectar()
+        ensure_first_login_column(conn)
         cur = conn.cursor(dictionary=True)
-        cur.execute('SELECT id, username, name, phone, IFNULL(first_login,0) AS first_login FROM admins WHERE id = %s', (admin_id,))
+        cur.execute('SELECT id, username, name, phone, first_login FROM admins WHERE id = %s', (admin_id,))
         admin_row = cur.fetchone()
         cur.close(); conn.close()
     except Exception:
@@ -228,6 +257,7 @@ def admin_change():
 
     try:
         conn = Conexao.conectar()
+        ensure_first_login_column(conn)
         cur = conn.cursor()
         # mark first_login = 1 after admin updates their info
         if password:
@@ -687,6 +717,21 @@ def logout():
         return redirect('/')
     session.pop('usuario', None)
     # Opcional: renovar o csrf_token
+    session['csrf_token'] = str(uuid.uuid4())
+    flash('Você saiu com sucesso.')
+    return redirect('/')
+
+
+@app.route('/admin/logout', methods=['POST'])
+def admin_logout():
+    # Valida token CSRF e remove o admin da sessão
+    form_token = request.form.get('csrf_token')
+    if not form_token or form_token != session.get('csrf_token'):
+        flash('Requisição inválida (CSRF).')
+        return redirect('/admin/login')
+    session.pop('admin_id', None)
+    session.pop('admin_username', None)
+    # Renovar o csrf_token
     session['csrf_token'] = str(uuid.uuid4())
     flash('Você saiu com sucesso.')
     return redirect('/')
