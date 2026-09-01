@@ -1,5 +1,5 @@
 import pytest
-from app import normalize_name
+from app import normalize_name, normalize_phone
 
 
 @pytest.mark.parametrize("raw,expected", [
@@ -15,3 +15,13 @@ from app import normalize_name
 ])
 def test_normalize_name(raw, expected):
     assert normalize_name(raw) == expected
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("(99) 99999-9999", "+559999999999"),
+    ("+55 (99) 99999-9999", "+559999999999"),
+    ("+5511999999999", "+5511999999999"),
+    ("11999999999", "+5511999999999"),
+])
+def test_normalize_phone(raw, expected):
+    assert normalize_phone(raw) == expected
