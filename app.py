@@ -475,13 +475,16 @@ def send_admin_booking_notification(booking):
     msg['To'] = notify_email
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=8) as server:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
             server.starttls()
             server.login(smtp_user, smtp_password)
             server.sendmail(smtp_from, [notify_email], msg.as_string())
+        app.logger.info(f"E-mail de notificação enviado para {notify_email} (agendamento de {usuario.get('nome','')}).")
     except Exception:
-        # Nunca deixar a notificação por e-mail derrubar o fluxo de agendamento.
-        pass
+        # Nunca deixar a notificação por e-mail derrubar o fluxo de agendamento —
+        # mas registra o erro real no log pra dar pra diagnosticar depois
+        # (ex.: provedor de hospedagem bloqueando conexões SMTP de saída).
+        app.logger.exception("Falha ao enviar e-mail de notificação de agendamento.")
 
 
 def hash_password(password: str) -> str:
